@@ -8,9 +8,6 @@
     },
     "com.vrchat.core.vpm-resolver": {
       "version": "0.1.28"
-    },
-    "com.nessie.udon.movement": {
-      "version": "0.4.0"
     }
   },
   "locked": {
@@ -27,12 +24,6 @@
     "com.vrchat.core.vpm-resolver": {
       "version": "0.1.28",
       "dependencies": {}
-    },
-    "com.nessie.udon.movement": {
-      "version": "0.4.0",
-      "dependencies": {
-        "com.vrchat.worlds": "^3.4.0"
-      }
     }
   }
 }
