@@ -1,10 +1,6 @@
-﻿using System;
-
-using UdonSharp;
+﻿using UdonSharp;
 
 using UnityEngine;
-
-using VRC.SDKBase;
 
 
 public class Pose : UdonSharpBehaviour {
