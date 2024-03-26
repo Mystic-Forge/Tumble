@@ -12,6 +12,8 @@ public class StructurePose : Pose {
     public string    structureId = "plank";
     public Transform structureSpawnPoint;
 
+    public AudioSource spawnStructureSound;
+    
     private StructureManager _structureManager;
     private Universe         _universe;
 
@@ -42,5 +44,7 @@ public class StructurePose : Pose {
         structure.transform.position = structureSpawnPoint.position;
         structure.transform.rotation = structureSpawnPoint.rotation;
         structure.OnSpawnStructure(ray.origin);
+
+        spawnStructureSound.Play();
     }
 }

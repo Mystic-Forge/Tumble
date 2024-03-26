@@ -8,10 +8,12 @@ using VRC.SDKBase;
 public class DashPose : Pose {
     public  float   dashForce     = 3;
     public  float   dashDuration  = 0.5f;
-    private float   _lastDashTime = 0;
-    private Vector3 _dashDirection;
+
+    public AudioSource dashSound;
 
     private NUMovement _movement;
+    private Vector3 _dashDirection;
+    private float   _lastDashTime;
 
     public override bool BlockOtherPoses => Time.time - _lastDashTime < dashDuration;
 
@@ -20,6 +22,8 @@ public class DashPose : Pose {
     public override void OnPoseEnter() {
         var headTracking = Networking.LocalPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
         _dashDirection = Vector3.ProjectOnPlane(headTracking.rotation * Vector3.forward, Vector3.up).normalized;
+        
+        dashSound.Play();
 
         _lastDashTime = Time.time;
         PoseUpdate();

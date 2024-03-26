@@ -4,12 +4,15 @@
 public class ModifierPose : Pose {
     public BoxCollider modifierRegion;
 
+    public AudioSource onApplySound;
+
     private void Start() { modifierRegion.enabled = false; }
 
     public override void OnPoseEnter() {
         var i              = 0;
         var alreadyApplied = new Structure[100];
         var overlap        = Physics.OverlapBox(modifierRegion.transform.position, modifierRegion.size / 2, modifierRegion.transform.rotation);
+        var any            = false;
         foreach (var collider in overlap) {
             if(collider == null) continue;
             
@@ -28,7 +31,10 @@ public class ModifierPose : Pose {
             OnApplyModifier(structure);
             alreadyApplied[i] = structure;
             i++;
+            any = true;
         }
+        
+        if(any) onApplySound.Play();
     }
     
     public virtual void OnApplyModifier(Structure structure) {
