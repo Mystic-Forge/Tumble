@@ -33874,7 +33874,7 @@ MonoBehaviour:
   groundResetMode: 0
   poseKey: 113
   modifierRegion: {fileID: 899861437}
-  onApplySound: {fileID: 0}
+  onApplySound: {fileID: 689327005}
 --- !u!1 &955965438
 GameObject:
   m_ObjectHideFlags: 0
@@ -43657,7 +43657,7 @@ MonoBehaviour:
   groundResetMode: 0
   poseKey: 101
   modifierRegion: {fileID: 1200067193}
-  onApplySound: {fileID: 0}
+  onApplySound: {fileID: 1484238940}
   force: {x: 0, y: 11, z: 0}
 --- !u!43 &1220432412
 Mesh:
