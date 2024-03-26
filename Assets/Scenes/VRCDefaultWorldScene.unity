@@ -35784,7 +35784,7 @@ MonoBehaviour:
   poseKey: 306
   dashForce: 8
   dashDuration: 0.5
-  dashSound: {fileID: 0}
+  dashSound: {fileID: 1398490508}
 --- !u!1 &1021904949
 GameObject:
   m_ObjectHideFlags: 0

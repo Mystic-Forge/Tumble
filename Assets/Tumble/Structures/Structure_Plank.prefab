@@ -63,7 +63,7 @@ MonoBehaviour:
   friction: 3
   spawnGrounded: 1
   timer: 10
-  spawnLaunchForce: {x: 0, y: 0, z: -20}
+  spawnLaunchForce: {x: 0, y: 0, z: -16}
   collider: {fileID: 8407705957944202180}
   velocity: {x: 0, y: 0, z: 0}
   useGravity: 1
