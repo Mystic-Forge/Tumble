@@ -26,8 +26,20 @@ public class StructureManager : UdonSharpBehaviour {
             child.gameObject.SetActive(true);
             return child.GetComponent<Structure>();
         }
-
-        return null;
+        
+        // No structures left, take oldest
+        var oldest         = holder.GetChild(0).GetComponent<Structure>();
+        var oldestTimeLeft = oldest.timeLeft;
+        for (var i = 1; i < holder.childCount; i++) {
+            var child = holder.GetChild(i).GetComponent<Structure>();
+            if (child.timeLeft < oldestTimeLeft) {
+                oldest         = child;
+                oldestTimeLeft = child.timeLeft;
+            }
+        }
+        
+        oldest.gameObject.SetActive(true);
+        return oldest;
     }
 
     public Structure[] GetSpawnedStructures() {

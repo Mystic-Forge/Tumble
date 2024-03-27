@@ -5,10 +5,10 @@ using VRC.SDKBase;
 
 public class LevelTrigger : UdonSharpBehaviour {
     public LevelTriggerType triggerType;
-    public int              levelIndex;
 
     private PlayerLeaderboard LocalLeaderboard => GetComponentInParent<Universe>().leaderboardManager.LocalLeaderboard;
-
+    private TumbleLevel Level => GetComponentInParent<TumbleLevel>();
+    
     public override void OnPlayerTriggerEnter(VRCPlayerApi player) {
         if (!player.isLocal) return;
 
@@ -27,7 +27,7 @@ public class LevelTrigger : UdonSharpBehaviour {
             var leaderboard = LocalLeaderboard;
             if (leaderboard == null) return;
 
-            leaderboard.StartLevel(levelIndex);
+            leaderboard.StartLevel(Level);
         }
     }
 }

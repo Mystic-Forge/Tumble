@@ -28,7 +28,7 @@ public class StructurePose : Pose {
         var ray        = new Ray(playerHead, dir.normalized);
         var hits       = Physics.RaycastAll(ray, dir.magnitude);
 
-        var passed = _universe.cheats.AllGroundIsDirt;
+        var passed = _universe.modifiers.AllGroundIsDirt;
 
         if (!passed)
             foreach (var h in hits) {

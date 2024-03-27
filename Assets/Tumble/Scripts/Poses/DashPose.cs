@@ -17,8 +17,6 @@ public class DashPose : Pose {
 
     public override bool BlockOtherPoses => Time.time - _lastDashTime < dashDuration;
 
-    private void Start() { _movement = GetComponentInParent<Universe>().movement; }
-
     public override void OnPoseEnter() {
         var headTracking = Networking.LocalPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
         _dashDirection = Vector3.ProjectOnPlane(headTracking.rotation * Vector3.forward, Vector3.up).normalized;
@@ -30,7 +28,9 @@ public class DashPose : Pose {
     }
 
     public override void PoseUpdate() {
-        var dashing = Time.time - _lastDashTime < dashDuration;
+        if(_movement == null) _movement = GetComponentInParent<Universe>().movement;
+        
+        var dashing                     = Time.time - _lastDashTime < dashDuration;
         _movement.forcePlayerUnGrounded = dashing;
         if(!dashing) return;
 

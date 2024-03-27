@@ -5,6 +5,7 @@ using Nessie.Udon.Movement;
 using UdonSharp;
 
 using UnityEngine;
+using UnityEngine.Serialization;
 
 using VRC.SDKBase;
 
@@ -26,7 +27,7 @@ public class Structure : UdonSharpBehaviour {
     public  bool    spawning;
     private Vector3 _spawnHeadPos;
 
-    private float _timeLeft;
+    public float timeLeft;
 
     public bool  radialExplodeForce;
     public float explosionForce = 8;
@@ -40,7 +41,7 @@ public class Structure : UdonSharpBehaviour {
     public void OnSpawnStructure(Vector3 spawnHeadPos) {
         _spawnHeadPos = spawnHeadPos;
 
-        _timeLeft     = timer;
+        timeLeft     = timer;
         useGravity    = true;
         physicsActive = true;
         grounded      = false;
@@ -49,9 +50,9 @@ public class Structure : UdonSharpBehaviour {
     }
 
     private void FixedUpdate() {
-        _timeLeft -= Time.fixedDeltaTime;
+        timeLeft -= Time.fixedDeltaTime;
 
-        if (_timeLeft <= 0) gameObject.SetActive(false);
+        if (timeLeft <= 0) gameObject.SetActive(false);
 
         if (physicsActive) {
             if (useGravity && !spawning && !grounded) velocity += Physics.gravity * Time.fixedDeltaTime;
@@ -70,7 +71,7 @@ public class Structure : UdonSharpBehaviour {
                 if (hit.collider.GetComponentInParent<NUMovement>() != null) continue;
                 if (hit.collider.GetComponentInParent<Structure>() != null) continue;
 
-                if (_universe.cheats.AllGroundIsDirt || GetHitGroundType(hit) != GroundType.Break) {
+                if (_universe.modifiers.AllGroundIsDirt || GetHitGroundType(hit) != GroundType.Break) {
                     _foundGround = true;
                     break;
                 }
@@ -157,8 +158,7 @@ public class Structure : UdonSharpBehaviour {
             return true;
         }
 
-        if (!_universe.cheats.AllGroundIsDirt && GetColliderGroundType(collider) == GroundType.Break) {
-            Debug.LogError("Hit Ground: " + collider.name);
+        if (!_universe.modifiers.AllGroundIsDirt && GetColliderGroundType(collider) == GroundType.Break) {
             DestroyStructure();
             return true;
         }
