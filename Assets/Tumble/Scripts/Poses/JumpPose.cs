@@ -14,8 +14,6 @@ public class JumpPose : Pose {
     private float _lastJumpTime;
 
     public override void OnPoseEnter() {
-        if(_movement == null) _movement = GetComponentInParent<Universe>().movement;
-        
         if (_movement._IsPlayerGrounded())
             jumpSound.Play();
         else
@@ -26,6 +24,7 @@ public class JumpPose : Pose {
     }
 
     public override void PoseUpdate() {
+        if(_movement == null) _movement = GetComponentInParent<Universe>().movement;
         if (Time.time - _lastJumpTime > jumpDuration) return;
 
         var velocity = _movement._GetVelocity();

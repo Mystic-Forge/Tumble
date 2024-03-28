@@ -1,11 +1,14 @@
 ﻿using System;
 
+using TMPro;
+
 using UdonSharp;
 
 using UnityEngine;
 using UnityEngine.Serialization;
 
 using VRC.SDK3.Data;
+using VRC.SDK3.Video.Components;
 
 
 public class LeaderboardListDisplay : UdonSharpBehaviour {
@@ -15,12 +18,20 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
     public int        currentPage;
     public int        levelIndex;
 
+    public int PageCount => Mathf.CeilToInt(_times.Count / (float)itemsPerPage);
+
     public                 LeaderboardScope        scope;
     public                 LeaderboardSortCriteria sortCriteria;
     public                 LeaderboardMode         mode;
     [NonSerialized] public ModifiersEnum           ModifiersFilter;
+    [NonSerialized] public int                     PlatformFilter = 7;
 
     public TumbleLevel Level => _universe.GetLevel(levelIndex);
+
+    public TextMeshProUGUI currentPageText;
+
+    public VRCUnityVideoPlayer videoPlayer;
+    public GameObject          videoScreen;
 
     private Universe           _universe;
     private LeaderboardManager _leaderboardManager;
@@ -33,6 +44,8 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
     }
 
     private void FixedUpdate() {
+        videoScreen.SetActive(videoPlayer.IsPlaying);
+
         var localLeaderboard = _universe.leaderboardManager.LocalLeaderboard;
         if (localLeaderboard == null) return;
         if (localLeaderboard.isRunning) return; // Don't update the leaderboard while the player is running to avoid lag spikes
@@ -42,24 +55,24 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
         UpdateData();
     }
 
-    private void FirstPage() {
+    public void FirstPage() {
         currentPage = 0;
         Refresh();
     }
 
-    private void LastPage() {
+    public void LastPage() {
         currentPage = Mathf.CeilToInt(_times.Count / (float)itemsPerPage) - 1;
         Refresh();
     }
 
-    private void NextPage() {
+    public void NextPage() {
         if (currentPage * itemsPerPage >= _times.Count) return;
 
         currentPage++;
         Refresh();
     }
 
-    private void PreviousPage() {
+    public void PreviousPage() {
         if (currentPage == 0) return;
 
         currentPage--;
@@ -101,7 +114,7 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
 
         if (scope == LeaderboardScope.All || scope == LeaderboardScope.InWorld) {
             foreach (var leaderboard in _leaderboardManager.Leaderboards) {
-                var time = leaderboard.GetBestLevelTime(level, ModifiersFilter);
+                var time = leaderboard.GetBestLevelTime(level, ModifiersFilter, PlatformFilter);
 
                 if (time != null) {
                     time                                  = time.ShallowClone();
@@ -135,6 +148,16 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
             if ((timeCheats | filter) != filter) times.Remove(time);
         }
 
+        // Filter platform
+        foreach (var time in times.ToArray()) {
+            if (PlatformFilter == 0) continue;
+
+            var platform = (int)PlayerLeaderboard.GetPlatformFromData(time);
+            platform = 1 << platform;
+
+            if ((platform | PlatformFilter) != PlatformFilter) times.Remove(time);
+        }
+
         return times;
     }
 
@@ -144,6 +167,12 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
         var placement = 1;
 
         var start = currentPage * itemsPerPage;
+        
+        if(start > _times.Count) {
+            currentPage = PageCount - 1;
+            start = currentPage * itemsPerPage;
+        }
+        
         var end   = Mathf.Min(start + itemsPerPage, _times.Count);
 
         for (var i = start; i < end; i++) {
@@ -154,6 +183,8 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
             entry.SetData(placement, time, PlayerLeaderboard.GetVerifiedFromData(time));
             placement++;
         }
+        
+        currentPageText.text = $"{currentPage + 1}/{PageCount}";
     }
 }
 

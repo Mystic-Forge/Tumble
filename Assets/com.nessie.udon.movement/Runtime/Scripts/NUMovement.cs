@@ -316,7 +316,7 @@ namespace Nessie.Udon.Movement
                 inputVector.x *= strafeSpeed;
                 inputVector.z *= HoldRun ? runSpeed : walkSpeed;
                 Vector3 movementVector = InputDirectionToMovementDirection(inputVector);
-                if (IsWalkable && !HoldJump)
+                if (IsWalkable && !HoldJump && !forcePlayerUnGrounded)
                 {
                     Velocity = movementVector;
                 }

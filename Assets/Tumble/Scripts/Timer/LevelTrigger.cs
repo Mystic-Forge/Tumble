@@ -16,6 +16,8 @@ public class LevelTrigger : UdonSharpBehaviour {
             var leaderboard = LocalLeaderboard;
             if (leaderboard == null) return;
 
+            if(LocalLeaderboard.currentLevel != Level) return;
+            
             leaderboard.SaveTime();
         }
     }

@@ -14,7 +14,6 @@ public class LeaderboardChip : UdonSharpBehaviour
     public LeaderboardChipType leaderboardChipType;
     
     public void ChipUpdated() {
-        Debug.Log("Chip updated");
         var leaderboard = GetComponentInParent<LeaderboardListDisplay>();
         var dropdown = GetComponent<Dropdown>();
         switch(leaderboardChipType) {

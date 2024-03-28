@@ -10,8 +10,9 @@ using VRC.SDKBase;
 
 
 public class LeaderboardManager : UdonSharpBehaviour {
-    [SerializeField] private string[] verifiedTimesJson;
-    public                   DataList verifiedTimes;
+    [SerializeField]                                    private string[] verifiedTimesJson;
+    [SerializeField] public  VRCUrl[] replayUrls;
+    public                                                      DataList verifiedTimes;
 
     public PlayerLeaderboard LocalLeaderboard {
         get {
@@ -69,7 +70,7 @@ public class LeaderboardManager : UdonSharpBehaviour {
 
         for (var i = 0; i < verifiedTimesJson.Length; i++) {
             if (VRCJson.TryDeserializeFromJson(verifiedTimesJson[i], out var data)) {
-                data.DataDictionary[PlayerLeaderboard.VerifiedTimeKey] = true;
+                data.DataDictionary[PlayerLeaderboard.VerifiedTimeKey] = i;
                 verifiedTimes.Add(data.DataDictionary);
             }
         }

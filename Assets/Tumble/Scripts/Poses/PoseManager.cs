@@ -7,6 +7,8 @@ using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon.Common;
 
+using Vector3 = UnityEngine.Vector3;
+
 
 public class PoseManager : UdonSharpBehaviour {
     public float maxDistance = 0.1f;
@@ -57,13 +59,29 @@ public class PoseManager : UdonSharpBehaviour {
         transform.position = new Vector3(headTracking.position.x, originTracking.position.y + 1.6f, headTracking.position.z);
         transform.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(headTracking.rotation * Vector3.forward, Vector3.up).normalized, Vector3.up);
 
-        var newPose = GetActivePose();
+        var newPose                  = GetActivePose(false);
+        // if (newPose == null && Networking.LocalPlayer.IsUserInVR()) newPose = GetActivePose(true);
+        _movement._SetJumpHeight(0);
+
+        // Check for cancel
+        var cancel                                                                       = false;
+        if (Time.time - _lastJumpTime < 0.2f && !_universe.modifiers.NoCooldowns) cancel = true;
+
+        if (!_universe.modifiers.NoCooldowns)
+            foreach (var pose in _poses)
+                if (pose.BlockOtherPoses) {
+                    cancel = true;
+                    break;
+                }
+
+        if (Networking.LocalPlayer.IsUserInVR() && !cancel) _movement._SetJumpHeight(2);
 
         if (_activePose != newPose) {
             if (_activePose != null) _activePose.OnPoseExit();
             _activePose = newPose;
 
-            if (_activePose != null
+            if (!cancel
+                && _activePose != null
                 && (Time.time - _activePose.lastPoseTime > 0.3f || _universe.modifiers.NoCooldowns)
                 && (!_activePose.requiresReset || _hasReset)
                ) {
@@ -88,7 +106,7 @@ public class PoseManager : UdonSharpBehaviour {
                     _hasReset                = false;
                     Networking.LocalPlayer.PlayHapticEventInHand(VRC_Pickup.PickupHand.Left,  0.2f, 0.3f, 0.1f);
                     Networking.LocalPlayer.PlayHapticEventInHand(VRC_Pickup.PickupHand.Right, 0.2f, 0.3f, 0.1f);
-                    
+
                     poseHitSound.clip = poseHitClips[Random.Range(0, poseHitClips.Length)];
                     poseHitSound.Play();
 
@@ -125,20 +143,9 @@ public class PoseManager : UdonSharpBehaviour {
         _lastJumpTime = Time.time;
     }
 
-    private Pose GetActivePose() {
-        if (Time.time - _lastJumpTime < 0.2f && !_universe.modifiers.NoCooldowns) return null;
-
+    private Pose GetActivePose(bool flip) {
         var leftHandTracking  = Networking.LocalPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.LeftHand);
         var rightHandTracking = Networking.LocalPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.RightHand);
-
-        _movement._SetJumpHeight(0);
-
-        if (!_universe.modifiers.NoCooldowns)
-            foreach (var pose in _poses)
-                if (pose.BlockOtherPoses)
-                    return null;
-
-        if (Networking.LocalPlayer.IsUserInVR()) _movement._SetJumpHeight(2);
 
         foreach (var pose in _poses) {
             if (Input.GetKey(pose.poseKey)) return pose;
@@ -146,12 +153,16 @@ public class PoseManager : UdonSharpBehaviour {
             if (pose.name == "jump" && _desktopJumping) return pose;
 
             pose.transform.localPosition = Vector3.up * HeightDeviation;
+            pose.transform.localScale    = new Vector3(flip ? -1 : 1, 1, 1);
+
             var leftHandDistance = Vector3.Distance(pose.transform.TransformPoint(pose.leftHand.localPosition * HeightRatio), leftHandTracking.position);
             var leftHandAngle    = Quaternion.Angle(pose.leftHand.rotation, leftHandTracking.rotation);
 
             var rightHandDistance = Vector3.Distance(pose.transform.TransformPoint(pose.rightHand.localPosition * HeightRatio), rightHandTracking.position);
             var rightHandAngle    = Quaternion.Angle(pose.rightHand.rotation, rightHandTracking.rotation);
+
             pose.transform.localPosition = Vector3.zero;
+            pose.transform.localScale    = Vector3.one;
 
             if (leftHandDistance < maxDistance * HeightRatio && leftHandAngle < maxAngle && rightHandDistance < maxDistance * HeightRatio && rightHandAngle < maxAngle) return pose;
         }

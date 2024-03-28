@@ -20,6 +20,7 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
     public const string DateKey          = "d";
     public const string PlayerNameKey    = "pn";
     public const string VerifiedTimeKey  = "vt";
+    public const string PlatformKey      = "p";
 
     public const string LevelDataKey = "times";
 
@@ -29,6 +30,7 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
     [UdonSynced] public string      serializedTimes;
     public              float       currentTime;
     public              bool        isRunning;
+    [UdonSynced] public bool        syncedWithVrcx = false;
 
     public bool HasOwner => !string.IsNullOrWhiteSpace(playerName);
 
@@ -42,17 +44,46 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
     private bool     _vrcxInitialized;
 
     private void FixedUpdate() {
-        VRCJson.TrySerializeToJson(_times, JsonExportType.Minify, out var json);
-
         if (!Networking.GetOwner(gameObject).isLocal) return;
 
         if (!Networking.LocalPlayer.isMaster && !HasOwner) playerName =  Networking.LocalPlayer.displayName;
         if (isRunning) currentTime                                    += Time.fixedDeltaTime;
 
         if (HasOwner && IsLocal && !_vrcxInitialized && Universe.pwiManager.IsReady()) {
-            _vrcxInitialized = true;
+            if (syncedWithVrcx) _times.Clear();
 
-            if (Universe.pwiManager.TryGetDataList(LevelDataKey, out var savedTimes)) AddSavedTimes(savedTimes);
+            if (Universe.pwiManager.TryGetString(LevelDataKey, out var savedTimesString))
+                if (VRCJson.TryDeserializeFromJson(savedTimesString, out var savedTimes))
+                    AddSavedTimes(savedTimes.DataList);
+            
+            // Scan for duplicates and remove them
+            var jsonArray = new DataList();
+            for (var index = 0; index < _times.Count; index++) {
+                var timeToken = _times[index];
+
+                if (VRCJson.TrySerializeToJson(timeToken, JsonExportType.Minify, out var json)) {
+                    if(jsonArray.Contains(json)) {
+                        _times.RemoveAt(index);
+                        continue;
+                    }
+                    jsonArray.Add(json);
+                }
+            }
+            
+            for (var index = 0; index < _times.Count; index++) {
+                var json = _times[index].ToString();
+            }
+
+            if(!syncedWithVrcx) SyncWithVrcx();
+            _vrcxInitialized = true;
+            RequestSerialization();
+        }
+    }
+    
+    private void SyncWithVrcx(){
+        if (Universe.pwiManager.IsReady()) {
+            Universe.pwiManager.StoreData(LevelDataKey, _times);
+            syncedWithVrcx = true;
         }
     }
 
@@ -92,17 +123,20 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
                 + $"{playerName} completed level {currentLevelIndex + 1} in {GetFormattedTime(GetTimeFromData(timeToken))}");
     }
 
-    public DataDictionary GetBestLevelTime(TumbleLevel level, ModifiersEnum modifierMask) {
+    public DataDictionary GetBestLevelTime(TumbleLevel level, ModifiersEnum modifierMask, int platformMask) {
         if (level == null) return null;
 
         var            bestTime  = float.MaxValue;
         DataDictionary bestToken = null;
-
+        
         foreach (var timeToken in GetTimesForLevel(level).ToArray()) {
             var modifiers = (int)GetModifiersFromData(timeToken);
             var filter    = (int)modifierMask;
 
             if ((modifiers | filter) != filter) continue;
+            
+            var platform = 1 << (int)GetPlatformFromData(timeToken);
+            if ((platform | platformMask) != platformMask) continue;
 
             var time = GetTimeFromData(timeToken);
             if (time >= bestTime) continue;
@@ -138,7 +172,8 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
         token[TumbleVersionKey] = new DataToken(Universe.Version);
         token[TimeKey]          = new DataToken(time);
         token[UsedModifiersKey] = new DataToken((int)modifiers);
-        token[DateKey]          = new DataToken(DateTime.Now.Ticks);
+        token[DateKey]          = new DataToken(DateTime.UtcNow.Ticks);
+        token[PlatformKey]      = new DataToken(Networking.LocalPlayer.IsUserInVR() ? (int)Platform.VR : (int)Platform.Desktop);
 
         return token;
     }
@@ -160,6 +195,7 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
     public static int GetTumbleVersionFromData(DataToken token) {
         var data = token.DataDictionary[TumbleVersionKey];
         if (data.TokenType == TokenType.Double) return (int)data.Double;
+
         return token.DataDictionary[TumbleVersionKey].Int;
     }
 
@@ -186,22 +222,32 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
 
     public static string GetPlayerNameFromData(DataToken token) => token.DataDictionary[PlayerNameKey].String;
 
-    public static bool GetVerifiedFromData(DataToken token) {
-        if (token.DataDictionary.TryGetValue(VerifiedTimeKey, out var verified)) return verified.Boolean;
+    public static int GetVerifiedFromData(DataToken token) {
+        if (token.DataDictionary.TryGetValue(VerifiedTimeKey, out var verified)) return verified.Int;
 
-        return false;
+        return -1;
+    }
+
+    public static Platform GetPlatformFromData(DataToken token) {
+        if (token.DataDictionary.TryGetValue(PlatformKey, out var platform)) {
+            if (platform.TokenType == TokenType.Double) return (Platform)(int)platform.Double;
+
+            return (Platform)platform.Int;
+        }
+
+        return Platform.Unknown;
     }
 
     public void AddTime(DataDictionary timeToken, bool syncWithVrcx = true) {
-        var level = Universe.GetLevel(GetLevelIndexFromData(timeToken));
         _times.Add(timeToken);
 
-        if (syncWithVrcx && Universe.pwiManager.IsReady()) Universe.pwiManager.StoreData(LevelDataKey, _times);
+        if (syncWithVrcx) SyncWithVrcx();
 
         RequestSerialization();
     }
 
     private void AddSavedTimes(DataList savedTimes) {
+        Debug.Log($"[TUMBLE] Loading {savedTimes.Count} saved times from VRCX...");
         foreach (var timeToken in savedTimes.ToArray()) AddTime(timeToken.DataDictionary, syncWithVrcx: false);
     }
 
@@ -216,11 +262,17 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
     public static string GetFormattedTime(float time) => TimeSpan.FromSeconds(time).ToString(@"mm\:ss\.fff");
 
     public static string GetFormattedDate(DateTime date) {
-        var relative = DateTime.Now - date;
+        var relative = DateTime.UtcNow - date;
         if (relative.TotalMinutes < 1) return $"{(int)relative.TotalSeconds}s ago";
         if (relative.TotalHours < 1) return $"{(int)relative.TotalMinutes}m ago";
         if (relative.TotalDays < 1) return $"{(int)relative.TotalHours}h ago";
 
         return $"{(int)relative.TotalDays}d ago";
     }
+}
+
+public enum Platform {
+    Unknown,
+    Desktop,
+    VR,
 }

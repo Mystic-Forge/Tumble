@@ -13,6 +13,9 @@ using VRC.SDKBase;
 public class LeaderboardListEntry : UdonSharpBehaviour {
     public TextMeshProUGUI playerName;
     public GameObject      verifiedBadge;
+    public GameObject      desktopModeBadge;
+    public GameObject      vrModeBadge;
+    public GameObject      replayButton;
     public TextMeshProUGUI time;
     public TextMeshProUGUI placement;
     public TextMeshProUGUI date;
@@ -23,10 +26,20 @@ public class LeaderboardListEntry : UdonSharpBehaviour {
     public Color           alternatingColorA;
     public Color           alternatingColorB;
 
-    public Universe universe;
+    public  Universe universe;
 
-    public void SetData(int placement, DataDictionary timeToken, bool verified) {
+    private int _verifiedIndex;
+
+    public void SetData(int placement, DataDictionary timeToken, int verifiedIndex) {
+        _verifiedIndex = verifiedIndex;
+        var verified = _verifiedIndex != -1;
+        
         verifiedBadge.SetActive(verified);
+        var platform = PlayerLeaderboard.GetPlatformFromData(timeToken);
+        desktopModeBadge.SetActive(platform == Platform.Desktop);
+        vrModeBadge.SetActive(platform == Platform.VR);
+        replayButton.SetActive(verified);
+
         this.placement.text = GetOrdinal(placement);
         time.text           = PlayerLeaderboard.GetFormattedTime(PlayerLeaderboard.GetTimeFromData(timeToken));
         var name = PlayerLeaderboard.GetPlayerNameFromData(timeToken);
@@ -43,14 +56,13 @@ public class LeaderboardListEntry : UdonSharpBehaviour {
         var image = GetComponent<Image>();
 
         var local = Networking.LocalPlayer.displayName == name;
+
         if (local && GetComponentInParent<LeaderboardListDisplay>().scope != LeaderboardScope.MyTimes)
             image.color = localColor;
         else
             image.color = placement % 2 == 0 ? alternatingColorA : alternatingColorB;
 
-        if (!local) {
-            inputField.gameObject.SetActive(false);
-        } else {
+        if (!local) { inputField.gameObject.SetActive(false); } else {
             inputField.gameObject.SetActive(true);
             if (VRCJson.TrySerializeToJson(timeToken, JsonExportType.Minify, out var json)) inputField.text = json.String;
         }
@@ -71,5 +83,9 @@ public class LeaderboardListEntry : UdonSharpBehaviour {
             case 3:  return number + "rd";
             default: return number + "th";
         }
+    }
+
+    public void PlayReplay() {
+        GetComponentInParent<LeaderboardListDisplay>().videoPlayer.PlayURL(universe.leaderboardManager.replayUrls[_verifiedIndex]);
     }
 }
