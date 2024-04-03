@@ -13,7 +13,7 @@ namespace Nessie.Udon.Movement
     {
         [SerializeField] public BoxCollider groundedCollider;
 
-        [SerializeField] protected bool isActive = true;
+        [SerializeField] public bool isActive = true;
 
         [Header("Misc")]
         [Tooltip("Determines what the player should inherit from the platform they're standing on.")]
@@ -727,7 +727,7 @@ namespace Nessie.Udon.Movement
         }
         
         [PublicAPI]
-        protected void SnapToPlayer()
+        public void SnapToPlayer()
         {
             Vector3 playerPos;
             if (InVR)

@@ -199,7 +199,7 @@ namespace Nessie.Udon.Movement
             CollisionMask = LayerUtility.GetCollisionMask(gameObject.layer);
         }
 
-        private void UpdateCachedVariables()
+        public void UpdateCachedVariables()
         {
             Gravity = Physics.gravity;
             GravityDirection = Gravity.normalized;

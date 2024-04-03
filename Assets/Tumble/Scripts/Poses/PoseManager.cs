@@ -46,6 +46,8 @@ public class PoseManager : UdonSharpBehaviour {
     }
 
     public override void PostLateUpdate() {
+        if(_universe.flyMovement.isActive) return;
+        
         height = Networking.LocalPlayer.GetAvatarEyeHeightAsMeters();
         foreach (var p in _poses) p.PoseUpdate();
 
