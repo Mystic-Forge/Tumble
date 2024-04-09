@@ -23,22 +23,21 @@ namespace Tumble.Scripts {
 
         private Universe     _universe;
         private VRCPlayerApi _player;
+        private NUMovement   _movement;
 
         private Vector3 _lastPosition;
 
         private void Start() {
             _universe = GetComponentInParent<Universe>();
             _player   = Networking.LocalPlayer;
+            _movement = _universe.movement;
         }
 
         private void Update() {
             if (Input.GetKeyDown(KeyCode.P)) {
                 isActive = !isActive;
-                _player.SetGravityStrength(isActive ? 0 : 1);
-                _lastPosition = _player.GetPosition();
-                _universe.movement.isActive = !isActive;
-                _universe.movement.SnapToPlayer();
-                _universe.movement._SetVelocity(Vector3.zero);
+                _movement._SetGravityStrength(isActive ? 0 : 1);
+                _lastPosition = _movement._GetPosition();
             }
         }
 
@@ -48,13 +47,13 @@ namespace Tumble.Scripts {
             var position = _lastPosition;
 
             var headTracking = _player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
-            var input        = (new Vector3(_horizontalInput, _upInput ? 1 : 0, _verticalInput)).normalized * flySpeed;
+            var input        = new Vector3(_horizontalInput, _upInput ? 1 : 0, _verticalInput).normalized * flySpeed;
             var moveVector   = headTracking.rotation * input;
 
             position += moveVector * Time.fixedDeltaTime;
 
-            _player.TeleportTo(position, _player.GetRotation(), VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint, true);
-            _player.SetVelocity(Vector3.zero);
+            _movement._SetPosition(position);
+            _movement._SetVelocity(Vector3.zero);
 
             _lastPosition = position;
         }
@@ -62,7 +61,7 @@ namespace Tumble.Scripts {
         public override void OnPlayerRespawn(VRCPlayerApi player) {
             if (!player.isLocal) return;
 
-            _lastPosition = player.GetPosition();
+            _lastPosition = _movement._GetPosition();
         }
 
         public override void InputMoveHorizontal(float value, UdonInputEventArgs args) { _horizontalInput = value; }

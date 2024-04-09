@@ -62,10 +62,10 @@ public class LeaderboardListEntry : UdonSharpBehaviour {
         else
             image.color = placement % 2 == 0 ? alternatingColorA : alternatingColorB;
 
-        if (!local) { inputField.gameObject.SetActive(false); } else {
-            inputField.gameObject.SetActive(true);
-            if (VRCJson.TrySerializeToJson(timeToken, JsonExportType.Minify, out var json)) inputField.text = json.String;
-        }
+        // if (!local) { inputField.gameObject.SetActive(false); } else {
+        //     inputField.gameObject.SetActive(true);
+        //     if (VRCJson.TrySerializeToJson(timeToken, JsonExportType.Minify, out var json)) inputField.text = json.String;
+        // }
     }
 
     private string GetOrdinal(int number) {

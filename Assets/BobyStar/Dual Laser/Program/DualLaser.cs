@@ -99,7 +99,12 @@ namespace BobyStar.DualLaser
         private Ray pointerLeftRayLocal = new Ray(Vector3.zero, Vector3.forward);
 
         private RaycastHit pointerHit;
-        private bool isPointerOn;
+        private bool       _isPointerOn;
+
+        private bool isPointerOn {
+            get => _isPointerOn || forcePointerOn; set => _isPointerOn = value; 
+        }
+        public  bool       forcePointerOn;
         #endregion
 
         private DataDictionary hitCache;

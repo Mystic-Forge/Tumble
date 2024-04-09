@@ -14,6 +14,7 @@ Shader "Tumble/MagicGlass-Draw"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_instancing
 
             #include "UnityCG.cginc"
 
@@ -24,7 +25,7 @@ Shader "Tumble/MagicGlass-Draw"
 
             fixed4 frag() : SV_Target
             {
-                return 1;
+                return float4(-1, 0, 0, 1);
             }
             ENDCG
         }

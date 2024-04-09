@@ -21,11 +21,11 @@ namespace Tumble.Scripts.Level {
 
         public LevelEditorToolMode mode = LevelEditorToolMode.Place;
 
-        public TumbleLevel level;
+        public LevelEditor editor;
         public float       maxPlaceDistance = 20f;
         public int         elementId        = 0;
-        public Transform   previewHolder;
-        
+
+        public Material outlinePrepareMaterial;
         public Material selectOutlineMaterial;
         public Material destroyOutlineMaterial;
         public Material placeOutlineMaterial;
@@ -33,15 +33,24 @@ namespace Tumble.Scripts.Level {
         private Universe            _universe;
         private DualLaser           _laser;
         private TumbleLevelLoader64 _levelLoader;
-        private GameObject          _placePreview;
+
+        private Vector3Int _dragStart;
+        private Vector3Int _dragEnd;
+        private Plane      _dragPlane;
+
+        private GameObject  _placeElement;
+        private Mesh        _placeMesh;
+        private Matrix4x4[] _placeMatrices = new Matrix4x4[256];
+        private int         _placeMatrixCount;
 
         private RaycastHit[] _hits = new RaycastHit[20];
 
         // Inputs
-        private bool _use;
         private bool _useDown;
         private bool _useHold;
         private bool _useUp;
+
+        private bool _enabled;
 
         private void Start() {
             _universe    = GetComponentInParent<Universe>();
@@ -52,11 +61,21 @@ namespace Tumble.Scripts.Level {
         }
 
         private void LateUpdate() {
-            if (Input.GetKeyDown(KeyCode.Alpha1)) mode = LevelEditorToolMode.Select;
-            if (Input.GetKeyDown(KeyCode.Alpha2)) mode = LevelEditorToolMode.Place;
-            if (Input.GetKeyDown(KeyCode.Alpha3)) mode = LevelEditorToolMode.Destroy;
-            if (Input.GetKeyDown(KeyCode.Alpha4)) mode = LevelEditorToolMode.Paint;
-
+            var newEnabled = editor != null && editor.level != null;
+            if (newEnabled != _enabled) {
+                _enabled = newEnabled;
+                _universe.dualLaser.forcePointerOn = _enabled;
+            }
+            if(editor.level == null) return;
+            
+            if (Input.GetKeyDown(KeyCode.Alpha1)) SetMode(0);
+            if (Input.GetKeyDown(KeyCode.Alpha2)) SetMode(1);
+            if (Input.GetKeyDown(KeyCode.Alpha3)) SetMode(2);
+            if (Input.GetKeyDown(KeyCode.Alpha4)) SetMode(3);
+            
+            var scroll = Input.GetAxis("Mouse ScrollWheel");
+            maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + scroll * 5f, 1, 100);
+            
             switch (mode) {
                 case LevelEditorToolMode.Select:
                     SelectMode();
@@ -64,26 +83,78 @@ namespace Tumble.Scripts.Level {
                 case LevelEditorToolMode.Place:
                     PlaceMode();
                     break;
+                case LevelEditorToolMode.Break:
+                    BreakMode();
+                    break;
                 case LevelEditorToolMode.Paint: break;
             }
 
             UpdateInputs();
         }
 
-        private void SelectMode() { }
+        private void SelectMode() {
+            var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
+            var element  = GetRayElement(rightRay, out var point, out var normal);
+            if (element != null) selection.Add(new DataToken(element));
+
+            DrawOutline(selectOutlineMaterial);
+        }
 
         private void PlaceMode() {
             var rightRay   = _laser.GetPointerRay(HandType.RIGHT, false);
             var hitElement = GetRayElement(rightRay, out var position, out var normal);
             position += normal * 0.1f;
-            var levelCell = level.GetCell(position);
-            previewHolder.position = level.GetWorldPosition(levelCell);
+            var levelCell = editor.level.GetCell(position);
 
-            if (_useDown) {
-                var element  = _levelLoader.GetElementPrefab(elementId);
-                var instance = Instantiate(element, level.GetElementHolder(elementId));
-                instance.transform.localPosition = levelCell;
-                instance.transform.rotation      = Quaternion.identity;
+            var updateMatrices = false;
+
+            if (_useUp) {
+                var start = new Vector3Int(Mathf.Min(_dragStart.x, _dragEnd.x), Mathf.Min(_dragStart.y, _dragEnd.y), Mathf.Min(_dragStart.z, _dragEnd.z));
+                var end   = new Vector3Int(Mathf.Max(_dragStart.x, _dragEnd.x), Mathf.Max(_dragStart.y, _dragEnd.y), Mathf.Max(_dragStart.z, _dragEnd.z));
+
+                for (var x = start.x; x <= end.x; x++)
+                for (var y = start.y; y <= end.y; y++)
+                for (var z = start.z; z <= end.z; z++) {
+                    var cell          = new Vector3Int(x, y, z);
+                    editor.AddElement(elementId, cell, Quaternion.identity);
+                }
+            }
+            
+            if (_useDown || !_useHold) {
+                _dragStart = levelCell;
+                _dragEnd       = levelCell;
+                updateMatrices = true;
+            }
+
+            if (_useHold) {
+                if (levelCell != _dragEnd) {
+                    _dragEnd       = levelCell;
+                    updateMatrices = true;
+                }
+            }
+
+            if (updateMatrices) {
+                _placeMatrixCount = 0;
+                var start = new Vector3Int(Mathf.Min(_dragStart.x, _dragEnd.x), Mathf.Min(_dragStart.y, _dragEnd.y), Mathf.Min(_dragStart.z, _dragEnd.z));
+                var end   = new Vector3Int(Mathf.Max(_dragStart.x, _dragEnd.x), Mathf.Max(_dragStart.y, _dragEnd.y), Mathf.Max(_dragStart.z, _dragEnd.z));
+
+                for (var x = start.x; x <= end.x; x++)
+                for (var y = start.y; y <= end.y; y++)
+                for (var z = start.z; z <= end.z; z++) {
+                    if (_placeMatrixCount >= _placeMatrices.Length) break;
+
+                    var cell          = new Vector3Int(x, y, z);
+                    if(editor.level.GetElementAt(cell) != null) continue;
+                    var worldPosition = editor.level.GetWorldPosition(cell);
+                    _placeMatrices[_placeMatrixCount++] = Matrix4x4.TRS(worldPosition, Quaternion.identity, Vector3.one);
+                }
+
+                updateMatrices = false;
+            }
+
+            if (_placeMesh != null && _placeMatrixCount > 0) {
+                VRCGraphics.DrawMeshInstanced(_placeMesh, 0, outlinePrepareMaterial, _placeMatrices, _placeMatrixCount);
+                VRCGraphics.DrawMeshInstanced(_placeMesh, 0, placeOutlineMaterial,   _placeMatrices, _placeMatrixCount);
             }
         }
 
@@ -91,8 +162,8 @@ namespace Tumble.Scripts.Level {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
             var element  = GetRayElement(rightRay, out var point, out var normal);
-            selection.Add(new DataToken(element));
-            
+            if (element != null) selection.Add(new DataToken(element));
+
             DrawOutline(destroyOutlineMaterial);
 
             if (_useDown && element != null) Destroy(element);
@@ -106,34 +177,41 @@ namespace Tumble.Scripts.Level {
                 if (element == null) continue;
 
                 var mesh = element.GetComponentInChildren<MeshFilter>();
-                if (mesh == null) continue;
+                if (mesh == null || mesh.mesh == null) continue;
 
-                var meshToken = new DataToken(mesh.sharedMesh);
+                var meshToken = new DataToken(mesh.mesh);
                 if (!meshes.ContainsKey(meshToken)) meshes.Add(meshToken, new DataList());
                 meshes[meshToken].DataList.Add(new DataToken(mesh.transform));
             }
-            
+
             foreach (var meshToken in meshes.GetKeys().ToArray()) {
-                var values = meshes[meshToken].DataList;
+                var values   = meshes[meshToken].DataList;
                 var matrices = new Matrix4x4[values.Count];
+
                 for (var i = 0; i < values.Count; i++) {
-                    var element = (GameObject)values[i].Reference;
-                    matrices[i] = element.transform.localToWorldMatrix;
+                    var element = (Transform)values[i].Reference;
+                    matrices[i] = element.localToWorldMatrix;
                 }
-                
-                VRCGraphics.DrawMeshInstanced((Mesh)meshToken.Reference, 0, material, matrices, matrices.Length);
+
+                VRCGraphics.DrawMeshInstanced((Mesh)meshToken.Reference, 0, outlinePrepareMaterial, matrices, matrices.Length);
+                VRCGraphics.DrawMeshInstanced((Mesh)meshToken.Reference, 0, material,               matrices, matrices.Length);
             }
         }
 
         public override void InputUse(bool value, UdonInputEventArgs args) {
-            _use     = value;
+            _useHold = value;
             _useDown = value;
+            _useUp   = !value;
+        }
+
+        public override void InputLookVertical(float value, UdonInputEventArgs args) {
+            if(!Networking.LocalPlayer.IsUserInVR()) return;
+            if(mode == LevelEditorToolMode.Place) maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + value * Time.deltaTime * 5f, 1, 100);
         }
 
         private void UpdateInputs() {
-            _useUp   = !_use && _useHold;
-            _useHold = _use;
             _useDown = false;
+            _useUp   = false;
         }
 
         private GameObject GetRayElement(Ray ray, out Vector3 point, out Vector3 normal) {
@@ -153,12 +231,15 @@ namespace Tumble.Scripts.Level {
 
                     if (nearest < h.distance) continue;
 
-                    if (level.TryGetHitElement(h, out var element)) {
+                    if (editor.level.TryGetHitElement(h, out var element)) {
                         normal         = h.normal;
                         position       = h.point;
                         nearest        = h.distance;
                         passed         = true;
                         nearestElement = element;
+                    } else if(h.collider.GetComponentInParent<Canvas>() != null) {
+                        point = h.point;
+                        return null;
                     }
                 }
 
@@ -174,24 +255,19 @@ namespace Tumble.Scripts.Level {
 
         private void SetElement(int elementId) {
             this.elementId = elementId;
-            if (_placePreview != null) Destroy(_placePreview);
-            _placePreview                         = Instantiate(_levelLoader.GetElementPrefab(elementId), previewHolder);
-            _placePreview.transform.localPosition = Vector3.zero;
-            _placePreview.transform.localRotation = Quaternion.identity;
-            _placePreview.transform.localScale    = Vector3.one;
+            _placeElement  = _levelLoader.GetElementPrefab(elementId);
+            _placeMesh     = _placeElement.GetComponentInChildren<MeshFilter>().mesh;
         }
 
         public void SetMode(int mode) {
-            this.mode = (LevelEditorToolMode)mode;
-
-            previewHolder.gameObject.SetActive(this.mode == LevelEditorToolMode.Place);
+            this.mode                          = (LevelEditorToolMode)mode;
         }
     }
 
     public enum LevelEditorToolMode {
         Select,
         Place,
-        Destroy,
+        Break,
         Paint,
     }
 }

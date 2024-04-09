@@ -173,7 +173,7 @@ Shader "Tumble/MagicGlass-Render"
                     float4 offset = float4(cos(ratio), sin(ratio), 0.0, 0.0) * edgeDistance;
                     float2 screenUV = screenPos.xy / screenPos.w;
                     mask = tex2D(MagicGlassMask, screenUV + offset.xy);
-                    if (mask.r < 0.5) return 0;
+                    if (mask.r > -0.5) return 0;
                 }
                 return 1;
             }
@@ -329,7 +329,7 @@ Shader "Tumble/MagicGlass-Render"
                 float mask = tex2Dproj(MagicGlassMask, i.screenPos).r;
                 float edgeWidthModifier = tex2D(_EdgeWidthModifier, generatedUv * _EdgeWidthModifier_ST.xy + _EdgeWidthModifier_ST.zw * _Time[1]).r * 0.8
                 + 0.2;
-                float4 edgeGlow = mask.r < 0.5 ? 0 : pow(1.01 - distanceToMaskEdge(i.screenPos, _EdgeDistance * edgeWidthModifier), 1 / _EdgePower);
+                float4 edgeGlow = mask.r > -0.5 ? 0 : pow(1.01 - distanceToMaskEdge(i.screenPos, _EdgeDistance * edgeWidthModifier), 1 / _EdgePower);
                 edgeGlow *= _EdgeColor;
                 col.rgb += edgeGlow.rgb;
 

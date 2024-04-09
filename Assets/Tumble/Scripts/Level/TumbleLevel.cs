@@ -3,36 +3,70 @@
 using UdonSharp;
 
 using UnityEngine;
+using UnityEngine.Serialization;
 
 using VRC.SDKBase;
 using VRC.Udon;
+using VRC.Udon.Common;
 
 using Random = UnityEngine.Random;
 
 
+[UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
 public class TumbleLevel : UdonSharpBehaviour {
     public int    version = 0;
     public int    levelIndex;
-    public string levelCode; // YYDDDRRRR
-
-    public bool test;
+    public int    levelId;
+    public string levelName;
 
     public string LevelKey => $"l{levelIndex}";
+
+    [UdonSynced] public string levelData;
+    private             float  _lastLevelSyncTime;
 
     public Transform  levelRoot;
     public GameObject elementHolderPrefab;
 
+    public bool levelLoaded = false;
+
+    private TumbleLevelLoader64 _loader;
+    private Universe            _universe;
+
+    private bool _initialized;
+
     private void Start() {
-        if (!test) return;
+        _universe = GetComponentInParent<Universe>();
+        _loader = _universe.levelLoader;
+    }
 
-        levelCode = GenerateLevelCode();
+    private void FixedUpdate() {
+        if(_universe.levelEditor.level != this) return;
+        
+        if (!Networking.GetOwner(gameObject).isLocal) return;
 
-        var loader = GetComponentInParent<Universe>().levelLoader;
+        if (Time.time - _lastLevelSyncTime > 5f) {
+            RequestSerialization();
+            _lastLevelSyncTime = Time.time;
+        }
+    }
 
-        var data        = TumbleLevelLoader64.SerializeLevel(this);
-        Debug.Log(data);
+    public void SaveData() {
+        levelData = TumbleLevelLoader64.SerializeLevel(this);
+    }
+    
+    public override void OnPreSerialization() {
+        var data = TumbleLevelLoader64.SerializeLevel(this);
+        if (data == levelData) return;
+
+        levelData = data;
+    }
+
+    public override void OnDeserialization(DeserializationResult result) {
+        var existingData = TumbleLevelLoader64.SerializeLevel(this);
+        if (levelData == existingData) return;
+
         ClearLevel();
-        loader.DeserializeLevel(data, this);
+        _loader.DeserializeLevel(levelData, this);
     }
 
     private void ClearLevel() {
@@ -46,36 +80,41 @@ public class TumbleLevel : UdonSharpBehaviour {
         var holder = levelRoot.Find(elementId.ToString());
 
         if (holder == null) {
-            holder = Instantiate(elementHolderPrefab, levelRoot).transform;
-            holder.name          = elementId.ToString();
+            holder      = Instantiate(elementHolderPrefab, levelRoot).transform;
+            holder.name = elementId.ToString();
         }
 
         return holder;
     }
-    
+
     public bool TryGetHitElement(RaycastHit hit, out GameObject element) {
         element = null;
         if (hit.collider == null) return false;
 
         if (!hit.collider.transform.IsChildOf(levelRoot)) return false;
-    
+
         element = hit.collider.gameObject;
-        while(element.transform.parent.parent != levelRoot) element = element.transform.parent.gameObject;
+        while (element.transform.parent.parent != levelRoot) element = element.transform.parent.gameObject;
         return true;
     }
-    
-    public Vector3Int GetCell(Vector3 position) {
-        var localPosition = levelRoot.InverseTransformPoint(position);
+
+    public GameObject GetElementAt(Vector3Int cell) {
+        for (var i = 0; i < levelRoot.childCount; i++) {
+            var holder = levelRoot.GetChild(i);
+
+            for (var j = 0; j < holder.childCount; j++) {
+                var element = holder.GetChild(j);
+                if (GetCell(element.position) == cell) return element.gameObject;
+            }
+        }
+
+        return null;
+    }
+
+    public Vector3Int GetCell(Vector3 worldPosition) {
+        var localPosition = levelRoot.InverseTransformPoint(worldPosition);
         return new Vector3Int(Mathf.RoundToInt(localPosition.x), Mathf.RoundToInt(localPosition.y), Mathf.RoundToInt(localPosition.z));
     }
 
     public Vector3 GetWorldPosition(Vector3Int cell) => levelRoot.TransformPoint(cell);
-
-    public string GenerateLevelCode() {
-        var now  = DateTime.UtcNow;
-        var day  = now.DayOfYear;
-        var year = now.Year - 2000;
-
-        return $"{year:D2}{day:D3}{TumbleLevelLoader.GetRandomCharacter()}{TumbleLevelLoader.GetRandomCharacter()}{TumbleLevelLoader.GetRandomCharacter()}{TumbleLevelLoader.GetRandomCharacter()}";
-    }
 }

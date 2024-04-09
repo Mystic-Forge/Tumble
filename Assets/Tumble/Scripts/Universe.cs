@@ -7,6 +7,7 @@ using Tumble.Scripts;
 using UdonSharp;
 
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.Serialization;
 
 using VRC.SDKBase;
@@ -25,6 +26,10 @@ public class Universe : UdonSharpBehaviour {
     public                                  PWIManager          pwiManager;
     public                                  TumbleLevelLoader64 levelLoader;
     public                                  DualLaser           dualLaser;
+    public                                  Transform           spawnPoint;
+    public                                  LevelEditor         levelEditor;
+    public                                  GameObject          mainMenu;
+    public                                  PlayerRoomManager   playerRoomManager;
 
     public TumbleLevel[] AllLevels => levelsHolder.GetComponentsInChildren<TumbleLevel>();
 

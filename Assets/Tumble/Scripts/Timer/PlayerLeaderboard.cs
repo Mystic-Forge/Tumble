@@ -55,32 +55,34 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
             if (Universe.pwiManager.TryGetString(LevelDataKey, out var savedTimesString))
                 if (VRCJson.TryDeserializeFromJson(savedTimesString, out var savedTimes))
                     AddSavedTimes(savedTimes.DataList);
-            
+
             // Scan for duplicates and remove them
             var jsonArray = new DataList();
+
             for (var index = 0; index < _times.Count; index++) {
                 var timeToken = _times[index];
 
                 if (VRCJson.TrySerializeToJson(timeToken, JsonExportType.Minify, out var json)) {
-                    if(jsonArray.Contains(json)) {
+                    if (jsonArray.Contains(json)) {
                         _times.RemoveAt(index);
                         continue;
                     }
+
                     jsonArray.Add(json);
                 }
             }
-            
+
             for (var index = 0; index < _times.Count; index++) {
                 var json = _times[index].ToString();
             }
 
-            if(!syncedWithVrcx) SyncWithVrcx();
+            if (!syncedWithVrcx) SyncWithVrcx();
             _vrcxInitialized = true;
             RequestSerialization();
         }
     }
-    
-    private void SyncWithVrcx(){
+
+    private void SyncWithVrcx() {
         if (Universe.pwiManager.IsReady()) {
             Universe.pwiManager.StoreData(LevelDataKey, _times);
             syncedWithVrcx = true;
@@ -128,13 +130,13 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
 
         var            bestTime  = float.MaxValue;
         DataDictionary bestToken = null;
-        
+
         foreach (var timeToken in GetTimesForLevel(level).ToArray()) {
             var modifiers = (int)GetModifiersFromData(timeToken);
             var filter    = (int)modifierMask;
 
             if ((modifiers | filter) != filter) continue;
-            
+
             var platform = 1 << (int)GetPlatformFromData(timeToken);
             if ((platform | platformMask) != platformMask) continue;
 
@@ -272,7 +274,7 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
 }
 
 public enum Platform {
-    Unknown,
-    Desktop,
-    VR,
+    Unknown = 0,
+    Desktop = 1,
+    VR      = 2,
 }

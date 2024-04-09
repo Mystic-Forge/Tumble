@@ -42,6 +42,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
     // X
     public static string SerializeLevel(TumbleLevel level) {
         var root = level.levelRoot;
+        if(root == null) return "";
 
         var chunks = new DataDictionary();
 
@@ -98,9 +99,9 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         var bytes                                     = new byte[data.Count];
         for (var i = 0; i < data.Count; i++) bytes[i] = (byte)data[i].Int;
 
-        var compressedBytes = Compress(bytes);
-        Debug.Log("Serialized level: " + data.Count + " bytes, compressed to " + compressedBytes.Length + " bytes");
-        return Encode(compressedBytes);
+        // var compressedBytes = Compress(bytes);
+        // Debug.Log("Serialized level: " + data.Count + " bytes, compressed to " + compressedBytes.Length + " bytes");
+        return Encode(bytes);
     }
 
     private static void StoreElement(DataDictionary chunks, Transform element, int elementId) {
@@ -119,7 +120,6 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         var chunkPos = chunkPosIndex * 32;
 
         var localPos = worldPos - chunkPos;
-        Debug.Log(localPos);
         var locationBytes = new byte[2];
         locationBytes[0] =  (byte)localPos.x; // XXXXXYYY YYZZZZZ- -ZZZZZYY YYYXXXXX
         locationBytes[0] |= (byte)((localPos.y << 5) & 0b11100000);
@@ -146,10 +146,9 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
         yPositions.Add(locationBytes[1]);
     }
-
-
+    
     public void DeserializeLevel(string data, TumbleLevel level) {
-        var bytes  = Decompress(Decode(data));
+        var bytes  = Decode(data);
         var offset = 0;
 
         var chunks     = new DataDictionary();
@@ -258,12 +257,12 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         }
     }
 
-    private static int EncodeRotation(Quaternion rotation) {
+    public static int EncodeRotation(Quaternion rotation) {
         var rot = rotation.eulerAngles / 90;
         return (int)(rot.x * 9 + rot.y * 3 + rot.z);
     }
 
-    private static Quaternion DecodeRotation(int rotation) {
+    public static Quaternion DecodeRotation(int rotation) {
         var x = rotation / 9;
         var y = (rotation / 3) % 3;
         var z = rotation % 3;
@@ -426,7 +425,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                 && currentIndex + longestMatchLength < input.Length
                 // && lastBlockSize > 10
                 ) {
-                Debug.Log("Match: " + longestMatchLength + " at " + longestMatchIndex + " from " + currentIndex);
+                // Debug.Log("Match: " + longestMatchLength + " at " + longestMatchIndex + " from " + currentIndex);
                 var d = newData.GetRange(0, lastBlockStartIndex);
                 var blockSize = EncodeInt32(lastBlockSize);
                 for (var i = 0; i < blockSize.Length; i++) d.Add(blockSize[i]);
@@ -606,7 +605,6 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         return result;
     }
 
-    // Use the 7 bit approach from above
     public static byte[] EncodeVariableLengthByteArray(byte[] data) {
         var result = new DataList();
 

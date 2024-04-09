@@ -14,16 +14,7 @@ public class LeaderboardManager : UdonSharpBehaviour {
     [SerializeField] public  VRCUrl[] replayUrls;
     public                                                      DataList verifiedTimes;
 
-    public PlayerLeaderboard LocalLeaderboard {
-        get {
-            for (var i = 0; i < transform.childCount; i++) {
-                var leaderboard = transform.GetChild(i).GetComponent<PlayerLeaderboard>();
-                if (leaderboard.IsLocal) return leaderboard;
-            }
-
-            return null;
-        }
-    }
+    public PlayerLeaderboard LocalLeaderboard => GetLeaderboard(Networking.LocalPlayer);
 
     public PlayerLeaderboard[] Leaderboards {
         get {

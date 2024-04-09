@@ -53,10 +53,10 @@ namespace Nessie.Udon.Movement
         
         [PublicAPI] protected Quaternion InputToWorld;
         
-        private readonly Collider[] _menuColliders = new Collider[12]; // Buffer for menu collider count.
-        [PublicAPI] protected bool MenuOpen;
-        [PublicAPI] protected bool MainMenuOpen;
-        [PublicAPI] protected bool QuickMenuOpen;
+        private readonly   Collider[] _menuColliders = new Collider[12]; // Buffer for menu collider count.
+        [PublicAPI] public bool       MenuOpen;
+        [PublicAPI] public bool       MainMenuOpen;
+        [PublicAPI] public bool       QuickMenuOpen;
         
         // Player
         [PublicAPI] protected Vector3 PlayerPosition;

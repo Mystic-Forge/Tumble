@@ -1418,7 +1418,7 @@ MonoBehaviour:
       Data: 
     - Name: <IsSerialized>k__BackingField
       Entry: 5
-      Data: false
+      Data: true
     - Name: _fieldAttributes
       Entry: 7
       Data: 83|System.Collections.Generic.List`1[[System.Attribute, mscorlib]], mscorlib
@@ -1472,7 +1472,7 @@ MonoBehaviour:
       Data: 
     - Name: <IsSerialized>k__BackingField
       Entry: 5
-      Data: false
+      Data: true
     - Name: _fieldAttributes
       Entry: 7
       Data: 86|System.Collections.Generic.List`1[[System.Attribute, mscorlib]], mscorlib
@@ -1526,7 +1526,7 @@ MonoBehaviour:
       Data: 
     - Name: <IsSerialized>k__BackingField
       Entry: 5
-      Data: false
+      Data: true
     - Name: _fieldAttributes
       Entry: 7
       Data: 89|System.Collections.Generic.List`1[[System.Attribute, mscorlib]], mscorlib
