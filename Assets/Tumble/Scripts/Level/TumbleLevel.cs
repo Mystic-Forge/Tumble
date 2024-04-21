@@ -5,6 +5,7 @@ using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
 
+using VRC.SDK3.Data;
 using VRC.SDKBase;
 using VRC.Udon;
 using VRC.Udon.Common;
@@ -14,20 +15,26 @@ using Random = UnityEngine.Random;
 
 [UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
 public class TumbleLevel : UdonSharpBehaviour {
-    public int    version = 0;
-    public int    levelIndex;
-    public int    levelId;
-    public string levelName;
+    public int      version = 0;
+    public int      levelIndex;
+    public int      levelId = -1;
+    public string   levelName;
+    public string   levelDescription;
+    public string[] tags;
 
     public string LevelKey => $"l{levelIndex}";
 
-    [UdonSynced] public string levelData;
-    private             float  _lastLevelSyncTime;
+    [UdonSynced] public string rawLevelData;
+    public  DataDictionary levelData;
+    
+    private float          _lastLevelSyncTime;
 
     public Transform  levelRoot;
     public GameObject elementHolderPrefab;
 
     public bool levelLoaded = false;
+    
+    public TumbleRoom room;
 
     private TumbleLevelLoader64 _loader;
     private Universe            _universe;
@@ -50,23 +57,32 @@ public class TumbleLevel : UdonSharpBehaviour {
         }
     }
 
+    public void LoadLevelFromRaw() {
+        ClearLevel();
+        levelLoaded = true;
+        
+        if(string.IsNullOrEmpty(rawLevelData)) return;
+        
+        levelData = _loader.DeserializeLevelData(rawLevelData);
+        _loader.LoadLevelFromData(this);
+    }
+
     public void SaveData() {
-        levelData = TumbleLevelLoader64.SerializeLevel(this);
+        rawLevelData = TumbleLevelLoader64.SerializeLevel(this);
     }
     
     public override void OnPreSerialization() {
         var data = TumbleLevelLoader64.SerializeLevel(this);
-        if (data == levelData) return;
+        if (data == rawLevelData) return;
 
-        levelData = data;
+        rawLevelData = data;
     }
 
     public override void OnDeserialization(DeserializationResult result) {
         var existingData = TumbleLevelLoader64.SerializeLevel(this);
-        if (levelData == existingData) return;
+        if (rawLevelData == existingData) return;
 
-        ClearLevel();
-        _loader.DeserializeLevel(levelData, this);
+        LoadLevelFromRaw();
     }
 
     private void ClearLevel() {
@@ -87,14 +103,16 @@ public class TumbleLevel : UdonSharpBehaviour {
         return holder;
     }
 
-    public bool TryGetHitElement(RaycastHit hit, out GameObject element) {
+    public bool TryGetHitElement(RaycastHit hit, out GameObject element, out int id) {
         element = null;
+        id     = -1;
         if (hit.collider == null) return false;
 
         if (!hit.collider.transform.IsChildOf(levelRoot)) return false;
 
         element = hit.collider.gameObject;
         while (element.transform.parent.parent != levelRoot) element = element.transform.parent.gameObject;
+        id = int.Parse(element.transform.parent.name);
         return true;
     }
 

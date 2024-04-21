@@ -28,8 +28,6 @@ public class PoseManager : UdonSharpBehaviour {
     public AudioSource poseHitSound;
     public AudioClip[] poseHitClips;
 
-    public bool blockPoses;
-
     private float _resetTime;
 
     private Universe   _universe;
@@ -49,7 +47,7 @@ public class PoseManager : UdonSharpBehaviour {
     }
 
     public override void PostLateUpdate() {
-        if (blockPoses || _universe.flyMovement.isActive || _movement.MenuOpen) return;
+        if (_universe.BlockInputs || _universe.flyMovement.isActive || _movement.MenuOpen) return;
             
         height = Networking.LocalPlayer.GetAvatarEyeHeightAsMeters();
         foreach (var p in _poses) p.PoseUpdate();

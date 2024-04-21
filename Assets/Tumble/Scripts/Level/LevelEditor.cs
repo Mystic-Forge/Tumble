@@ -2,6 +2,8 @@
 
 using TMPro;
 
+using Tumble.Scripts.Level;
+
 using UdonSharp;
 
 using UnityEngine;
@@ -16,7 +18,12 @@ public class LevelEditor : UdonSharpBehaviour {
     public TumbleLevel level;
     public Transform   synchronizerHolder;
 
+    public InputField levelNameInputField;
+    public InputField levelDescriptionInputField;
+    public InputField levelTagsInputField;
     public InputField saveLevelDataInputField;
+
+    public LevelEditorTool tool;
     
     private LevelEditorSynchronizer[] _synchronizers;
 
@@ -50,12 +57,33 @@ public class LevelEditor : UdonSharpBehaviour {
     private void Update() {
         if (Input.GetKeyDown(KeyCode.J)) JoinEditors();
         
-        if(level == null) return;
-        saveLevelDataInputField.text = level.levelData;
+        // if(level == null) return;
+        // saveLevelDataInputField.text = level.rawLevelData;
+    }
+
+    public void SetLevelName() {
+        level.levelName = levelNameInputField.text;
+    }
+    
+    public void SetLevelDescription() {
+        level.levelDescription = levelDescriptionInputField.text;
+    }
+    
+    public void SetLevelTags() {
+        level.tags = levelTagsInputField.text.Split(' ');
     }
     
     public void SaveLevelData() {
         level.SaveData();
+        saveLevelDataInputField.text = level.rawLevelData;
+    }
+    
+    public void LoadLevelData() {
+        level.rawLevelData = saveLevelDataInputField.text;
+        level.LoadLevelFromRaw();
+        levelNameInputField.text = level.levelName;
+        levelDescriptionInputField.text = level.levelDescription;
+        levelTagsInputField.text = string.Join(" ", level.tags);
     }
 
     public void JoinEditors() {
@@ -96,6 +124,8 @@ public class LevelEditor : UdonSharpBehaviour {
         InstantiateElement(elementId, position, rotation);
     }
     
+    public void RemoveElement(GameObject element) => RemoveElement(element.transform.localPosition);
+    
     public void RemoveElement(Vector3 position) {
         var synchronizer = LocalSynchronizer;
         if (synchronizer == null) return;
@@ -111,6 +141,8 @@ public class LevelEditor : UdonSharpBehaviour {
         change["p"] = new DataToken(positionArray);
 
         synchronizer.SubmitChange(change);
+        
+        Destroy(level.GetElementAt(new Vector3Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y), Mathf.RoundToInt(position.z))));
     }
 
     public void ReceiveChange(DataDictionary change) {

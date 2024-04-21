@@ -17,6 +17,8 @@ using Mesh = UnityEngine.Mesh;
 namespace Tumble.Scripts.Level {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class LevelEditorTool : UdonSharpBehaviour {
+        private const int MaxBlockSize = 3;
+        
         public DataList selection;
 
         public LevelEditorToolMode mode = LevelEditorToolMode.Place;
@@ -26,9 +28,15 @@ namespace Tumble.Scripts.Level {
         public int         elementId        = 0;
 
         public Material outlinePrepareMaterial;
+
+        public int paintColor;
+
         public Material selectOutlineMaterial;
         public Material destroyOutlineMaterial;
         public Material placeOutlineMaterial;
+
+        public bool debugBlockPermutations;
+        public bool generatePermutations;
 
         private Universe            _universe;
         private DualLaser           _laser;
@@ -58,24 +66,93 @@ namespace Tumble.Scripts.Level {
             _levelLoader = _universe.levelLoader;
             SetElement(0);
             SetMode(1);
+
+            var x = 0;
+
+            if (debugBlockPermutations) {
+                for (var i = 0; i < _blockPermutationIndices.Length; i++) {
+                    var size  = new Vector3Int(i / 9, (i / 3) % 3, i % 3);
+                    var index = _blockPermutationIndices[i];
+                    var rot   = _blockPermutationRotations[i];
+                    var obj   = GameObject.Instantiate(_levelLoader.levelElements[index], new Vector3(x, 0, 0), rot);
+                    obj.transform.SetParent(transform);
+                    obj.name =  $"{size.x}x{size.y}x{size.z}";
+                    x        += size.x + 3;
+                }
+            }
+        }
+
+        private void Update() {
+            if(_universe.BlockInputs) return;
+
+            if (debugBlockPermutations) {
+                var x = 0;
+                for (var i = 0; i < _blockPermutationIndices.Length; i++) {
+                    var size = new Vector3Int(i / 9, (i / 3) % 3, i % 3);
+                    size += Vector3Int.one;
+                    DrawDebugBox(new Vector3(x, 0, 0) - (Vector3.one * 0.5f), size);
+                    x += size.x + 2;
+                }
+            }
+
+            if (generatePermutations) {
+                generatePermutations = false;
+
+                var s = "";
+
+                for (var i = 0; i < transform.childCount; i++) {
+                    var c = transform.GetChild(i);
+                    s += $"Quaternion.Euler({c.localEulerAngles.x}, {c.localEulerAngles.y}, {c.localEulerAngles.z}), // {c.name}\n";
+                }
+
+                Debug.Log(s);
+            }
+        }
+
+        private void DrawDebugBox(Vector3 position, Vector3Int size) {
+            var v000 = position;
+            var v100 = position + new Vector3(size.x, 0,      0);
+            var v101 = position + new Vector3(size.x, 0,      size.z);
+            var v001 = position + new Vector3(0,      0,      size.z);
+            var v010 = position + new Vector3(0,      size.y, 0);
+            var v110 = position + new Vector3(size.x, size.y, 0);
+            var v111 = position + new Vector3(size.x, size.y, size.z);
+            var v011 = position + new Vector3(0,      size.y, size.z);
+
+            Debug.DrawLine(v000, v100, Color.red);
+            Debug.DrawLine(v100, v101, Color.red);
+            Debug.DrawLine(v101, v001, Color.red);
+            Debug.DrawLine(v001, v000, Color.red);
+            Debug.DrawLine(v000, v010, Color.red);
+            Debug.DrawLine(v100, v110, Color.red);
+            Debug.DrawLine(v101, v111, Color.red);
+            Debug.DrawLine(v001, v011, Color.red);
+            Debug.DrawLine(v010, v110, Color.red);
+            Debug.DrawLine(v110, v111, Color.red);
+            Debug.DrawLine(v111, v011, Color.red);
+            Debug.DrawLine(v011, v010, Color.red);
         }
 
         private void LateUpdate() {
-            var newEnabled = editor != null && editor.level != null;
+            var newEnabled = editor != null && editor.level != null && !_universe.BlockInputs;
+
             if (newEnabled != _enabled) {
-                _enabled = newEnabled;
+                _enabled                           = newEnabled;
                 _universe.dualLaser.forcePointerOn = _enabled;
             }
-            if(editor.level == null) return;
             
+            if (!_enabled) return;
+
+            if (editor.level == null) return;
+
             if (Input.GetKeyDown(KeyCode.Alpha1)) SetMode(0);
             if (Input.GetKeyDown(KeyCode.Alpha2)) SetMode(1);
             if (Input.GetKeyDown(KeyCode.Alpha3)) SetMode(2);
             if (Input.GetKeyDown(KeyCode.Alpha4)) SetMode(3);
-            
+
             var scroll = Input.GetAxis("Mouse ScrollWheel");
             maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + scroll * 5f, 1, 100);
-            
+
             switch (mode) {
                 case LevelEditorToolMode.Select:
                     SelectMode();
@@ -86,7 +163,9 @@ namespace Tumble.Scripts.Level {
                 case LevelEditorToolMode.Break:
                     BreakMode();
                     break;
-                case LevelEditorToolMode.Paint: break;
+                case LevelEditorToolMode.Paint: 
+                    PaintMode();
+                    break;
             }
 
             UpdateInputs();
@@ -94,79 +173,146 @@ namespace Tumble.Scripts.Level {
 
         private void SelectMode() {
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal);
+            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId);
             if (element != null) selection.Add(new DataToken(element));
 
             DrawOutline(selectOutlineMaterial);
         }
 
+        #region Place Mode
         private void PlaceMode() {
             var rightRay   = _laser.GetPointerRay(HandType.RIGHT, false);
-            var hitElement = GetRayElement(rightRay, out var position, out var normal);
+            var hitElement = GetRayElement(rightRay, out var position, out var normal, out var elementId);
             position += normal * 0.1f;
             var levelCell = editor.level.GetCell(position);
 
-            var updateMatrices = false;
-
-            if (_useUp) {
-                var start = new Vector3Int(Mathf.Min(_dragStart.x, _dragEnd.x), Mathf.Min(_dragStart.y, _dragEnd.y), Mathf.Min(_dragStart.z, _dragEnd.z));
-                var end   = new Vector3Int(Mathf.Max(_dragStart.x, _dragEnd.x), Mathf.Max(_dragStart.y, _dragEnd.y), Mathf.Max(_dragStart.z, _dragEnd.z));
-
-                for (var x = start.x; x <= end.x; x++)
-                for (var y = start.y; y <= end.y; y++)
-                for (var z = start.z; z <= end.z; z++) {
-                    var cell          = new Vector3Int(x, y, z);
-                    editor.AddElement(elementId, cell, Quaternion.identity);
-                }
-            }
+            var clampedDragEnd = new Vector3Int(
+                Mathf.Clamp(_dragEnd.x, _dragStart.x - MaxBlockSize + 1, _dragStart.x + MaxBlockSize - 1),
+                Mathf.Clamp(_dragEnd.y, _dragStart.y - MaxBlockSize + 1, _dragStart.y + MaxBlockSize - 1),
+                Mathf.Clamp(_dragEnd.z, _dragStart.z - MaxBlockSize + 1, _dragStart.z + MaxBlockSize - 1)
+            );
             
+            var start = new Vector3Int(Mathf.Min(_dragStart.x, clampedDragEnd.x), Mathf.Min(_dragStart.y, clampedDragEnd.y), Mathf.Min(_dragStart.z, clampedDragEnd.z));
+            var end   = new Vector3Int(Mathf.Max(_dragStart.x, clampedDragEnd.x), Mathf.Max(_dragStart.y, clampedDragEnd.y), Mathf.Max(_dragStart.z, clampedDragEnd.z));
+            var size  = end - start;
+            var perm  = size.x * 9 + size.y * 3 + size.z;
+            var index = _blockPermutationIndices[perm];
+            var rot   = _blockPermutationRotations[perm];
+
+            if (_useUp) editor.AddElement(index, start, rot);
+
             if (_useDown || !_useHold) {
                 _dragStart = levelCell;
-                _dragEnd       = levelCell;
-                updateMatrices = true;
+                _dragEnd   = levelCell;
             }
 
-            if (_useHold) {
-                if (levelCell != _dragEnd) {
-                    _dragEnd       = levelCell;
-                    updateMatrices = true;
-                }
-            }
+            if (_useHold)
+                if (levelCell != _dragEnd)
+                    _dragEnd = levelCell;
 
-            if (updateMatrices) {
-                _placeMatrixCount = 0;
-                var start = new Vector3Int(Mathf.Min(_dragStart.x, _dragEnd.x), Mathf.Min(_dragStart.y, _dragEnd.y), Mathf.Min(_dragStart.z, _dragEnd.z));
-                var end   = new Vector3Int(Mathf.Max(_dragStart.x, _dragEnd.x), Mathf.Max(_dragStart.y, _dragEnd.y), Mathf.Max(_dragStart.z, _dragEnd.z));
+            var mesh = _levelLoader.levelElements[index].GetComponentInChildren<MeshFilter>().sharedMesh;
 
-                for (var x = start.x; x <= end.x; x++)
-                for (var y = start.y; y <= end.y; y++)
-                for (var z = start.z; z <= end.z; z++) {
-                    if (_placeMatrixCount >= _placeMatrices.Length) break;
+            var matrix = new Matrix4x4[] {
+                Matrix4x4.TRS(start, rot, Vector3.one),
+            };
 
-                    var cell          = new Vector3Int(x, y, z);
-                    if(editor.level.GetElementAt(cell) != null) continue;
-                    var worldPosition = editor.level.GetWorldPosition(cell);
-                    _placeMatrices[_placeMatrixCount++] = Matrix4x4.TRS(worldPosition, Quaternion.identity, Vector3.one);
-                }
-
-                updateMatrices = false;
-            }
-
-            if (_placeMesh != null && _placeMatrixCount > 0) {
-                VRCGraphics.DrawMeshInstanced(_placeMesh, 0, outlinePrepareMaterial, _placeMatrices, _placeMatrixCount);
-                VRCGraphics.DrawMeshInstanced(_placeMesh, 0, placeOutlineMaterial,   _placeMatrices, _placeMatrixCount);
-            }
+            VRCGraphics.DrawMeshInstanced(mesh, 0, outlinePrepareMaterial, matrix, 1);
+            VRCGraphics.DrawMeshInstanced(mesh, 0, placeOutlineMaterial,   matrix, 1);
         }
+
+        private int[] _blockPermutationIndices = new int[] {
+            0, // 1x1x1
+            1, // 1x1x2
+            2, // 1x1x3
+            1, // 1x2x1
+            3, // 1x2x2
+            4, // 1x2x3
+            2, // 1x3x1
+            4, // 1x3x2
+            5, // 1x3x3
+            1, // 2x1x1
+            3, // 2x1x2
+            4, // 2x1x3
+            3, // 2x2x1
+            6, // 2x2x2
+            7, // 2x2x3
+            4, // 2x3x1
+            7, // 2x3x2
+            8, // 2x3x3
+            2, // 3x1x1
+            4, // 3x1x2
+            5, // 3x1x3
+            4, // 3x2x1
+            7, // 3x2x2
+            8, // 3x2x3
+            5, // 3x3x1
+            8, // 3x3x2
+            9, // 3x3x3
+        };
+
+        private Quaternion[] _blockPermutationRotations = new Quaternion[] {
+            Quaternion.Euler(0,   0,   0),   // 0x0x0
+            Quaternion.Euler(0,   0,   0),   // 0x0x1
+            Quaternion.Euler(0,   0,   0),   // 0x0x2
+            Quaternion.Euler(270, 0,   0),   // 0x1x0
+            Quaternion.Euler(0,   0,   0),   // 0x1x1
+            Quaternion.Euler(0,   0,   0),   // 0x1x2
+            Quaternion.Euler(270, 0,   0),   // 0x2x0
+            Quaternion.Euler(270, 180, 0),   // 0x2x1
+            Quaternion.Euler(0,   0,   0),   // 0x2x2
+            Quaternion.Euler(0,   90,  0),   // 1x0x0
+            Quaternion.Euler(0,   0,   270), // 1x0x1
+            Quaternion.Euler(0,   0,   270), // 1x0x2
+            Quaternion.Euler(0,   90,  0),   // 1x1x0
+            Quaternion.Euler(0,   0,   0),   // 1x1x1
+            Quaternion.Euler(0,   0,   0),   // 1x1x2
+            Quaternion.Euler(270, 270, 0),   // 1x2x0
+            Quaternion.Euler(270, 270, 0),   // 1x2x1
+            Quaternion.Euler(0,   0,   0),   // 1x2x2
+            Quaternion.Euler(0,   90,  0),   // 2x0x0
+            Quaternion.Euler(0,   90,  90),  // 2x0x1
+            Quaternion.Euler(0,   0,   270), // 2x0x2
+            Quaternion.Euler(0,   90,  0),   // 2x1x0
+            Quaternion.Euler(0,   90,  90),  // 2x1x1
+            Quaternion.Euler(0,   90,  90),  // 2x1x2
+            Quaternion.Euler(0,   90,  0),   // 2x2x0
+            Quaternion.Euler(270, 270, 0),   // 2x2x1
+            Quaternion.Euler(0,   0,   0),   // 2x2x2
+        };
+        #endregion
 
         private void BreakMode() {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal);
+            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId);
             if (element != null) selection.Add(new DataToken(element));
 
             DrawOutline(destroyOutlineMaterial);
 
-            if (_useDown && element != null) Destroy(element);
+            if (_useDown && element != null) editor.RemoveElement(element);
+        }
+
+        private void PaintMode() {
+            selection.Clear();
+            var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
+            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId);
+            if (element != null) selection.Add(new DataToken(element));
+            DrawOutline(selectOutlineMaterial);
+
+            if (_useHold && element != null) {
+                if (elementId < 30) // In block range
+                {
+                    var shape = elementId % 10;
+                    var color = elementId / 10;
+                    if(paintColor == color) return;
+                    var newElementId = paintColor * 10 + shape;
+                    var rotation = element.transform.localRotation;
+                    var position = element.transform.localPosition;
+                    
+                    editor.RemoveElement(element);
+                    editor.AddElement(newElementId, position, rotation);
+                }
+            }
         }
 
         private void DrawOutline(Material material) {
@@ -205,8 +351,9 @@ namespace Tumble.Scripts.Level {
         }
 
         public override void InputLookVertical(float value, UdonInputEventArgs args) {
-            if(!Networking.LocalPlayer.IsUserInVR()) return;
-            if(mode == LevelEditorToolMode.Place) maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + value * Time.deltaTime * 5f, 1, 100);
+            if (!Networking.LocalPlayer.IsUserInVR()) return;
+
+            if (mode == LevelEditorToolMode.Place) maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + value * Time.deltaTime * 5f, 1, 100);
         }
 
         private void UpdateInputs() {
@@ -214,8 +361,9 @@ namespace Tumble.Scripts.Level {
             _useUp   = false;
         }
 
-        private GameObject GetRayElement(Ray ray, out Vector3 point, out Vector3 normal) {
+        private GameObject GetRayElement(Ray ray, out Vector3 point, out Vector3 normal, out int elementId) {
             normal = -ray.direction;
+            elementId = -1;
 
             var hitCount = Physics.RaycastNonAlloc(ray, _hits, maxPlaceDistance);
 
@@ -229,17 +377,19 @@ namespace Tumble.Scripts.Level {
                     var h = _hits[i];
                     if (h.collider == null) continue;
 
+                    if (h.collider.GetComponentInParent<Canvas>() != null) {
+                        point = h.point;
+                        return null;
+                    }
+                    
                     if (nearest < h.distance) continue;
 
-                    if (editor.level.TryGetHitElement(h, out var element)) {
+                    if (editor.level.TryGetHitElement(h, out var element, out elementId)) {
                         normal         = h.normal;
                         position       = h.point;
                         nearest        = h.distance;
                         passed         = true;
                         nearestElement = element;
-                    } else if(h.collider.GetComponentInParent<Canvas>() != null) {
-                        point = h.point;
-                        return null;
                     }
                 }
 
@@ -259,9 +409,7 @@ namespace Tumble.Scripts.Level {
             _placeMesh     = _placeElement.GetComponentInChildren<MeshFilter>().mesh;
         }
 
-        public void SetMode(int mode) {
-            this.mode                          = (LevelEditorToolMode)mode;
-        }
+        public void SetMode(int mode) { this.mode = (LevelEditorToolMode)mode; }
     }
 
     public enum LevelEditorToolMode {

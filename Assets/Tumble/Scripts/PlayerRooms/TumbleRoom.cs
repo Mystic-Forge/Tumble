@@ -20,6 +20,9 @@ public class TumbleRoom : UdonSharpBehaviour {
     private void Start() {
         _universe    = GetComponentInParent<Universe>();
         _roomManager = GetComponentInParent<PlayerRoomManager>();
+        
+        if(level != null)
+            level.room = this;
     }
 
     public void JoinRoom() {
@@ -45,7 +48,7 @@ public class TumbleRoom : UdonSharpBehaviour {
     }
 
     private void LoadRoom() {
-        if (!level.levelLoaded) _universe.levelLoader.DeserializeLevel(level.levelData, level);
+        if (!level.levelLoaded) level.LoadLevelFromRaw();
 
         if (roomType == RoomType.Editor) _universe.levelEditor.level = level;
     }

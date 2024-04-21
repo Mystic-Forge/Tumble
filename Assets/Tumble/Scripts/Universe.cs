@@ -1,4 +1,6 @@
-﻿using BobyStar.DualLaser;
+﻿using System;
+
+using BobyStar.DualLaser;
 
 using Nessie.Udon.Movement;
 
@@ -30,6 +32,14 @@ public class Universe : UdonSharpBehaviour {
     public                                  LevelEditor         levelEditor;
     public                                  GameObject          mainMenu;
     public                                  PlayerRoomManager   playerRoomManager;
+    public                                  EmojiSupportManager emojiSupportManager;
+    
+    public int blockingInputs = 0;
+    public bool BlockInputs => blockingInputs > 0;
+
+    private void LateUpdate() {
+        movement.forceNoMovement = BlockInputs;
+    }
 
     public TumbleLevel[] AllLevels => levelsHolder.GetComponentsInChildren<TumbleLevel>();
 

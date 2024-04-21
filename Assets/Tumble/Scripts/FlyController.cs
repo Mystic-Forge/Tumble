@@ -42,7 +42,7 @@ namespace Tumble.Scripts {
         }
 
         private void FixedUpdate() {
-            if (!isActive) return;
+            if (!isActive || _universe.BlockInputs) return;
 
             var position = _lastPosition;
 

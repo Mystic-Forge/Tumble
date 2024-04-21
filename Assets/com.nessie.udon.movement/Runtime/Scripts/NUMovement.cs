@@ -89,6 +89,7 @@ namespace Nessie.Udon.Movement
         [PublicAPI] protected bool WasWalkable;
         [PublicAPI] protected bool ForcePlayerGrounded;
         [PublicAPI] public    bool forcePlayerUnGrounded;
+        [PublicAPI] public    bool forceNoMovement;
         
         [PublicAPI] protected Vector3 GroundUp;
         [PublicAPI] protected Transform GroundTransform;
@@ -295,7 +296,7 @@ namespace Nessie.Udon.Movement
                 MotionOffset += GetVROffset(); // Don't affect velocity.
             }
             
-            if (HoldMove)
+            if (HoldMove && !forceNoMovement)
             {
                 float speedMultiplier = scaleMovement ? AvatarHeight : 1f;
                 switch (PlayerStance)
@@ -354,7 +355,7 @@ namespace Nessie.Udon.Movement
                 }
             }
             
-            if (IsWalkable && HoldJump)
+            if (IsWalkable && HoldJump && !forceNoMovement)
             {
                 JumpTime = 0f;
                 IsJumping = true;

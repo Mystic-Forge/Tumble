@@ -1,0 +1,25 @@
+fileFormatVersion: 2
+guid: b863702881a4d7b4d8cd19da5d546b00
+TrueTypeFontImporter:
+  externalObjects: {}
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontNames:
+  - Noto Emoji
+  fallbackFontReferences:
+  - {fileID: 12800000, guid: 12507187879455543afb443bd09af536, type: 3}
+  - {fileID: 12800000, guid: f748d72821cf2c045812ee8cf46117ab, type: 3}
+  - {fileID: 12800000, guid: e68f9ead79857d14cbb88f5a4cb8def0, type: 3}
+  - {fileID: 12800000, guid: 412133c6b4ad37044ae530c6e668a964, type: 3}
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  useLegacyBoundsCalculation: 0
+  shouldRoundAdvanceValue: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
