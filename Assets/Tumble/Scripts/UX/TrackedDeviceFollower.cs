@@ -10,6 +10,8 @@ namespace UdonSharp.Examples.Utilities
     public class TrackedDeviceFollower : UdonSharpBehaviour 
     {
         public VRCPlayerApi.TrackingDataType trackingTarget;
+        public bool                       followPosition = true;
+        public bool                       followRotation = true;
 
         VRCPlayerApi playerApi;
         bool         isInEditor;
@@ -27,7 +29,11 @@ namespace UdonSharp.Examples.Utilities
                 return;
 
             VRCPlayerApi.TrackingData trackingData = playerApi.GetTrackingData(trackingTarget);
-            transform.SetPositionAndRotation(trackingData.position, trackingData.rotation);
+            if(followPosition)
+                transform.position = trackingData.position;
+            if(followRotation)
+                transform.rotation = trackingData.rotation;
+            
         }
     }
 }

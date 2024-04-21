@@ -18,7 +18,7 @@ namespace Tumble.Scripts.Level {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class LevelEditorTool : UdonSharpBehaviour {
         private const int MaxBlockSize = 3;
-        
+
         public DataList selection;
 
         public LevelEditorToolMode mode = LevelEditorToolMode.Place;
@@ -65,7 +65,7 @@ namespace Tumble.Scripts.Level {
             _laser       = _universe.dualLaser;
             _levelLoader = _universe.levelLoader;
             SetElement(0);
-            SetMode(1);
+            SetMode(0);
 
             var x = 0;
 
@@ -83,10 +83,11 @@ namespace Tumble.Scripts.Level {
         }
 
         private void Update() {
-            if(_universe.BlockInputs) return;
+            if (_universe.BlockInputs) return;
 
             if (debugBlockPermutations) {
                 var x = 0;
+
                 for (var i = 0; i < _blockPermutationIndices.Length; i++) {
                     var size = new Vector3Int(i / 9, (i / 3) % 3, i % 3);
                     size += Vector3Int.one;
@@ -134,21 +135,24 @@ namespace Tumble.Scripts.Level {
         }
 
         private void LateUpdate() {
-            var newEnabled = editor != null && editor.level != null && !_universe.BlockInputs;
+            var newEnabled = editor != null
+                && editor.level != null
+                && !_universe.BlockInputs
+                && mode != LevelEditorToolMode.Play;
 
             if (newEnabled != _enabled) {
                 _enabled                           = newEnabled;
-                _universe.dualLaser.forcePointerOn = _enabled;
+                _universe.flyMovement.SetFlyActive(_enabled);
             }
-            
+
             if (!_enabled) return;
 
             if (editor.level == null) return;
 
-            if (Input.GetKeyDown(KeyCode.Alpha1)) SetMode(0);
-            if (Input.GetKeyDown(KeyCode.Alpha2)) SetMode(1);
-            if (Input.GetKeyDown(KeyCode.Alpha3)) SetMode(2);
-            if (Input.GetKeyDown(KeyCode.Alpha4)) SetMode(3);
+            if (Input.GetKeyDown(KeyCode.Alpha1)) SetMode(1);
+            if (Input.GetKeyDown(KeyCode.Alpha2)) SetMode(2);
+            if (Input.GetKeyDown(KeyCode.Alpha3)) SetMode(3);
+            if (Input.GetKeyDown(KeyCode.Alpha4)) SetMode(4);
 
             var scroll = Input.GetAxis("Mouse ScrollWheel");
             maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + scroll * 5f, 1, 100);
@@ -163,7 +167,7 @@ namespace Tumble.Scripts.Level {
                 case LevelEditorToolMode.Break:
                     BreakMode();
                     break;
-                case LevelEditorToolMode.Paint: 
+                case LevelEditorToolMode.Paint:
                     PaintMode();
                     break;
             }
@@ -173,16 +177,20 @@ namespace Tumble.Scripts.Level {
 
         private void SelectMode() {
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId);
+            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
+            if (cancel) return;
+
             if (element != null) selection.Add(new DataToken(element));
 
             DrawOutline(selectOutlineMaterial);
         }
 
-        #region Place Mode
+#region Place Mode
         private void PlaceMode() {
             var rightRay   = _laser.GetPointerRay(HandType.RIGHT, false);
-            var hitElement = GetRayElement(rightRay, out var position, out var normal, out var elementId);
+            var hitElement = GetRayElement(rightRay, out var position, out var normal, out var elementId, out var cancel);
+            if (cancel) return;
+
             position += normal * 0.1f;
             var levelCell = editor.level.GetCell(position);
 
@@ -191,7 +199,7 @@ namespace Tumble.Scripts.Level {
                 Mathf.Clamp(_dragEnd.y, _dragStart.y - MaxBlockSize + 1, _dragStart.y + MaxBlockSize - 1),
                 Mathf.Clamp(_dragEnd.z, _dragStart.z - MaxBlockSize + 1, _dragStart.z + MaxBlockSize - 1)
             );
-            
+
             var start = new Vector3Int(Mathf.Min(_dragStart.x, clampedDragEnd.x), Mathf.Min(_dragStart.y, clampedDragEnd.y), Mathf.Min(_dragStart.z, clampedDragEnd.z));
             var end   = new Vector3Int(Mathf.Max(_dragStart.x, clampedDragEnd.x), Mathf.Max(_dragStart.y, clampedDragEnd.y), Mathf.Max(_dragStart.z, clampedDragEnd.z));
             var size  = end - start;
@@ -199,7 +207,7 @@ namespace Tumble.Scripts.Level {
             var index = _blockPermutationIndices[perm];
             var rot   = _blockPermutationRotations[perm];
 
-            if (_useUp) editor.AddElement(index, start, rot);
+            if (_useUp) editor.AddElement(index + paintColor * 10, start, rot);
 
             if (_useDown || !_useHold) {
                 _dragStart = levelCell;
@@ -279,12 +287,14 @@ namespace Tumble.Scripts.Level {
             Quaternion.Euler(270, 270, 0),   // 2x2x1
             Quaternion.Euler(0,   0,   0),   // 2x2x2
         };
-        #endregion
+#endregion
 
         private void BreakMode() {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId);
+            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
+            if (cancel) return;
+
             if (element != null) selection.Add(new DataToken(element));
 
             DrawOutline(destroyOutlineMaterial);
@@ -295,7 +305,9 @@ namespace Tumble.Scripts.Level {
         private void PaintMode() {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId);
+            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
+            if (cancel) return;
+
             if (element != null) selection.Add(new DataToken(element));
             DrawOutline(selectOutlineMaterial);
 
@@ -304,11 +316,12 @@ namespace Tumble.Scripts.Level {
                 {
                     var shape = elementId % 10;
                     var color = elementId / 10;
-                    if(paintColor == color) return;
+                    if (paintColor == color) return;
+
                     var newElementId = paintColor * 10 + shape;
-                    var rotation = element.transform.localRotation;
-                    var position = element.transform.localPosition;
-                    
+                    var rotation     = element.transform.localRotation;
+                    var position     = element.transform.localPosition;
+
                     editor.RemoveElement(element);
                     editor.AddElement(newElementId, position, rotation);
                 }
@@ -351,9 +364,9 @@ namespace Tumble.Scripts.Level {
         }
 
         public override void InputLookVertical(float value, UdonInputEventArgs args) {
-            if (!Networking.LocalPlayer.IsUserInVR()) return;
+            // if (!Networking.LocalPlayer.IsUserInVR()) return;
 
-            if (mode == LevelEditorToolMode.Place) maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + value * Time.deltaTime * 5f, 1, 100);
+            // if (mode == LevelEditorToolMode.Place) maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + value * Time.deltaTime * 5f, 1, 100);
         }
 
         private void UpdateInputs() {
@@ -361,9 +374,10 @@ namespace Tumble.Scripts.Level {
             _useUp   = false;
         }
 
-        private GameObject GetRayElement(Ray ray, out Vector3 point, out Vector3 normal, out int elementId) {
-            normal = -ray.direction;
+        private GameObject GetRayElement(Ray ray, out Vector3 point, out Vector3 normal, out int elementId, out bool cancel) {
+            normal    = -ray.direction;
             elementId = -1;
+            cancel    = false;
 
             var hitCount = Physics.RaycastNonAlloc(ray, _hits, maxPlaceDistance);
 
@@ -378,10 +392,11 @@ namespace Tumble.Scripts.Level {
                     if (h.collider == null) continue;
 
                     if (h.collider.GetComponentInParent<Canvas>() != null) {
-                        point = h.point;
+                        point  = h.point;
+                        cancel = true;
                         return null;
                     }
-                    
+
                     if (nearest < h.distance) continue;
 
                     if (editor.level.TryGetHitElement(h, out var element, out elementId)) {
@@ -413,6 +428,7 @@ namespace Tumble.Scripts.Level {
     }
 
     public enum LevelEditorToolMode {
+        Play,
         Select,
         Place,
         Break,

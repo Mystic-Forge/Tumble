@@ -54,11 +54,8 @@ public class LevelEditor : UdonSharpBehaviour {
         _loader        = GetComponentInParent<Universe>().levelLoader;
     }
 
-    private void Update() {
-        if (Input.GetKeyDown(KeyCode.J)) JoinEditors();
-        
-        // if(level == null) return;
-        // saveLevelDataInputField.text = level.rawLevelData;
+    private void FixedUpdate() {
+        JoinEditors();
     }
 
     public void SetLevelName() {

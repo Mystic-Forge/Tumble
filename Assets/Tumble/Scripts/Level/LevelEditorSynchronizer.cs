@@ -17,7 +17,7 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
 
     public LevelEditor editor;
 
-    public bool HasOwner => !string.IsNullOrWhiteSpace(playerName);
+    public bool HasOwner => !string.IsNullOrWhiteSpace(playerName) && Networking.GetOwner(gameObject).displayName == playerName; 
 
     public bool IsLocal => playerName == Networking.LocalPlayer.displayName;
 

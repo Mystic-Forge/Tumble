@@ -44,7 +44,9 @@ public class TumbleRoom : UdonSharpBehaviour {
         _universe.spawnPoint.SetPositionAndRotation(Vector3.zero, Quaternion.identity); // Tentative until we get a world spawn location
         _universe.movement._TeleportTo(_universe.spawnPoint.position, _universe.spawnPoint.rotation);
 
-        if (roomType == RoomType.Editor) _universe.levelEditor.level = null;
+        if (roomType == RoomType.Editor) {
+            _universe.levelEditor.level = null;
+        }
     }
 
     private void LoadRoom() {
@@ -61,7 +63,7 @@ public class TumbleRoom : UdonSharpBehaviour {
     public void SetRoomOwner(VRCPlayerApi player) {
         roomOwner = player.displayName;
         Networking.SetOwner(player, gameObject);
-        if (player.isLocal) {
+        if (player.isLocal && _roomManager.localTracker.requestingRoom) {
             roomOwner = player.displayName;
             JoinRoom();
         }

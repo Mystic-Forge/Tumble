@@ -102,9 +102,8 @@ namespace BobyStar.DualLaser
         private bool       _isPointerOn;
 
         private bool isPointerOn {
-            get => _isPointerOn || forcePointerOn; set => _isPointerOn = value; 
+            get => false; set => _isPointerOn = value; 
         }
-        public  bool       forcePointerOn;
         #endregion
 
         private DataDictionary hitCache;

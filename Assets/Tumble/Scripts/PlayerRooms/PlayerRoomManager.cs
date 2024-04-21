@@ -5,6 +5,7 @@ using UdonSharp;
 using UnityEngine;
 using UnityEngine.Serialization;
 
+using VRC.SDK3.Data;
 using VRC.SDKBase;
 using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
@@ -12,6 +13,8 @@ using VRC.Udon.Common.Interfaces;
 
 public class PlayerRoomManager : UdonSharpBehaviour {
     public PlayerRoomTracker localTracker;
+
+    public GameObject editorMenu;
 
     private PlayerRoomTracker[] _trackers;
     private TumbleRoom[]        _rooms;
@@ -22,13 +25,15 @@ public class PlayerRoomManager : UdonSharpBehaviour {
     }
 
     private void FixedUpdate() {
-        if (!Networking.LocalPlayer.isMaster) { return; }
+        if (localTracker != null) editorMenu.gameObject.SetActive(localTracker.currentRoom != -1 && _rooms[localTracker.currentRoom].roomType == RoomType.Editor);
+
+        if (!Networking.LocalPlayer.isMaster) return;
 
         var players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
         VRCPlayerApi.GetPlayers(players);
 
         foreach (var player in players) {
-            if (player == null) { continue; }
+            if (player == null) continue;
 
             var tracker = GetTracker(player);
 
@@ -47,6 +52,8 @@ public class PlayerRoomManager : UdonSharpBehaviour {
 
             if (tracker.requestingRoom) {
                 var room = FindAvailableRoom();
+                var endsInS = player.displayName.ToLower()[player.displayName.Length - 1] == 's';
+                room.roomName = player.displayName + (endsInS ? "'" : "'s") + " Room";
                 room.roomType = tracker.requestedRoomType;
                 room.SetRoomOwner(player);
 
@@ -54,6 +61,8 @@ public class PlayerRoomManager : UdonSharpBehaviour {
                     tracker.RoomRequestCompleted();
                 else
                     tracker.SendCustomNetworkEvent(NetworkEventTarget.Owner, "RoomRequestCompleted");
+                
+                tracker.requestingRoom = false;
             }
         }
     }
@@ -85,5 +94,20 @@ public class PlayerRoomManager : UdonSharpBehaviour {
     public void RequestRoom(RoomType type) {
         localTracker.requestingRoom    = true;
         localTracker.requestedRoomType = type;
+    }
+
+    public TumbleRoom[] GetOpenRooms() {
+        var openRoomArray = new TumbleRoom[_rooms.Length];
+        var i             = 0;
+
+        for (var j = 0; j < _rooms.Length; j++) {
+            var room                                               = _rooms[j];
+            if (room.roomType != RoomType.Vacant) openRoomArray[i++] = room;
+        }
+
+        var finalArray = new TumbleRoom[i];
+        for (var j = 0; j < i; j++) finalArray[j] = openRoomArray[j];
+
+        return finalArray;
     }
 }
