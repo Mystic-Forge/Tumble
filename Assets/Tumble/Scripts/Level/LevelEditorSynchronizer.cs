@@ -17,7 +17,7 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
 
     public LevelEditor editor;
 
-    public bool HasOwner => !string.IsNullOrWhiteSpace(playerName) && Networking.GetOwner(gameObject).displayName == playerName; 
+    public bool HasOwner => !string.IsNullOrWhiteSpace(playerName); // && Networking.GetOwner(gameObject).displayName == playerName;
 
     public bool IsLocal => playerName == Networking.LocalPlayer.displayName;
 
@@ -32,9 +32,9 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
     }
 
     private void FixedUpdate() {
-        if (!Networking.LocalPlayer.isMaster && !HasOwner) playerName = Networking.LocalPlayer.displayName;
-
-        if (IsLocal && Networking.GetOwner(gameObject) != Networking.LocalPlayer) Networking.SetOwner(Networking.LocalPlayer, gameObject);
+        var owner                                                    = Networking.GetOwner(gameObject);
+        if (!owner.isMaster && owner.isLocal && !IsLocal) playerName = Networking.LocalPlayer.displayName;
+        if (IsLocal && !owner.isLocal) Networking.SetOwner(Networking.LocalPlayer, gameObject);
     }
 
     public void SubmitChange(DataDictionary change) {
@@ -54,22 +54,24 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
         changesData = jsonToken.String;
     }
 
-    public override void OnPostSerialization(SerializationResult result) {
-        var changes = _localChanges["c"].DataList;
-        changes.Clear();
-    }
+    public override void OnPostSerialization(SerializationResult result) => _localChanges["c"].DataList.Clear();
 
     public override void OnDeserialization(DeserializationResult result) {
         if (string.IsNullOrEmpty(changesData)) return;
 
+        // If we are not in the same room, we do not care about the change
         var owner = Networking.GetOwner(gameObject);
-        if (_universe.playerRoomManager.GetTracker(owner).currentRoom != _universe.playerRoomManager.localTracker.currentRoom) return; // If we are not in the room, we do not care about the change
+        if (_universe.playerRoomManager.GetTracker(owner).currentRoom != _universe.playerRoomManager.localTracker.currentRoom) return;
 
         if (VRCJson.TryDeserializeFromJson(changesData, out var deserializedChanges)) {
             var changes = deserializedChanges.DataDictionary;
 
             foreach (var change in changes["c"].DataList.ToArray()) editor.ReceiveChange(change.DataDictionary);
         }
+    }
+
+    public override void OnOwnershipTransferred(VRCPlayerApi player) {
+        if (player.isLocal && !player.isMaster) playerName = player.displayName;
     }
 }
 

@@ -1,4 +1,6 @@
-﻿using UdonSharp;
+﻿using System.Globalization;
+
+using UdonSharp;
 
 using UnityEngine;
 
@@ -6,6 +8,7 @@ using VRC.SDKBase;
 using VRC.Udon;
 
 
+[UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
 public class TumbleRoom : UdonSharpBehaviour {
     [UdonSynced] public string    roomName;
     public              Transform spawnPoint;
@@ -13,6 +16,8 @@ public class TumbleRoom : UdonSharpBehaviour {
     [UdonSynced] public string    roomOwner;
 
     public TumbleLevel level;
+    
+    public bool LocalIsRoomOwner => Networking.LocalPlayer.displayName == roomOwner;
 
     private PlayerRoomManager _roomManager;
     private Universe          _universe;
@@ -30,6 +35,7 @@ public class TumbleRoom : UdonSharpBehaviour {
         if (localTracker == null) return;
 
         localTracker.currentRoom = transform.GetSiblingIndex();
+        localTracker.RequestSerialization();
         _universe.movement._TeleportTo(spawnPoint.position, spawnPoint.rotation, VRC_SceneDescriptor.SpawnOrientation.AlignPlayerWithSpawnPoint);
         _universe.spawnPoint.transform.SetPositionAndRotation(spawnPoint.position, spawnPoint.rotation);
 
@@ -41,6 +47,7 @@ public class TumbleRoom : UdonSharpBehaviour {
         if (localTracker == null) return;
 
         localTracker.currentRoom = -1;
+        localTracker.RequestSerialization();
         _universe.spawnPoint.SetPositionAndRotation(Vector3.zero, Quaternion.identity); // Tentative until we get a world spawn location
         _universe.movement._TeleportTo(_universe.spawnPoint.position, _universe.spawnPoint.rotation);
 
@@ -50,9 +57,14 @@ public class TumbleRoom : UdonSharpBehaviour {
     }
 
     private void LoadRoom() {
-        if (!level.levelLoaded) level.LoadLevelFromRaw();
+        if (!level.levelLoaded) {
+            if (roomType == RoomType.Editor) level.LoadLevelFromRaw();
+            else level.LoadLevel();
+        }
 
         if (roomType == RoomType.Editor) _universe.levelEditor.level = level;
+        
+        _universe.BroadcastCustomEvent("EventOnRoomLoaded");
     }
 
     public override void OnOwnershipTransferred(VRCPlayerApi player) {
@@ -67,6 +79,27 @@ public class TumbleRoom : UdonSharpBehaviour {
             roomOwner = player.displayName;
             JoinRoom();
         }
+        RequestSerialization();
+    }
+    
+    public VRCPlayerApi[] GetPlayers() {
+        var players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
+        VRCPlayerApi.GetPlayers(players);
+        
+        var playersInRoom = new VRCPlayerApi[players.Length];
+        var i             = 0;
+
+        foreach (var p in players) {
+            var tracker = _roomManager.GetTracker(p);
+            if (tracker == null) continue;
+            if (tracker.currentRoom != transform.GetSiblingIndex()) continue;
+            playersInRoom[i++] = p;
+        }
+
+        var finalPlayers = new VRCPlayerApi[i];
+        for (var j = 0; j < i; j++) finalPlayers[j] = playersInRoom[j];
+        
+        return finalPlayers;
     }
 }
 

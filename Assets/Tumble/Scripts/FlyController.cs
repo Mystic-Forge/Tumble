@@ -21,6 +21,7 @@ namespace Tumble.Scripts {
         private float _horizontalInput;
         private float _verticalInput;
         private bool  _upInput;
+        private float _horizontalLookInput;
 
         private Universe     _universe;
         private VRCPlayerApi _player;
@@ -42,7 +43,7 @@ namespace Tumble.Scripts {
             fakeGroundCollider.SetActive(isActive);
         }
 
-        private void FixedUpdate() {
+        private void LateUpdate() {
             if (!isActive || _universe.BlockInputs) return;
 
             var position = _lastPosition;
@@ -53,14 +54,30 @@ namespace Tumble.Scripts {
                 return;
             }
 
-            var headTracking = _player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
-            var input        = new Vector3(_horizontalInput, _upInput ? 1 : 0, _verticalInput).normalized * flySpeed;
-            var moveVector   = headTracking.rotation * input;
+            var input          = new Vector3(_horizontalInput, _upInput ? 1 : 0, _verticalInput).normalized;
 
-            position += moveVector * Time.fixedDeltaTime;
+            var headOriented = !Networking.LocalPlayer.IsUserInVR();
+
+            if (headOriented) {
+                input = _player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head).rotation * input;
+            } else {
+                var laser   = _universe.dualLaser.GetPointerRay(HandType.LEFT, false);
+                var forward = laser.direction;
+                var right   = Vector3.ProjectOnPlane(_player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head).rotation * Vector3.right, Vector3.up).normalized;
+                
+                input = forward * input.z + right * input.x + Vector3.up * input.y;
+            }
+
+            var speed = flySpeed;
+            if(!Networking.LocalPlayer.IsUserInVR())
+                if (!Input.GetKey(KeyCode.LeftShift)) speed *= 0.5f;
+
+            position += input * flySpeed * Time.deltaTime;
 
             _movement._SetPosition(position);
             _movement._SetVelocity(Vector3.zero);
+            var lookSensitivity = Networking.LocalPlayer.IsUserInVR() ? 180f * Time.deltaTime : 3f;
+            _movement.LookRotation = Quaternion.AngleAxis(_horizontalLookInput * lookSensitivity, Vector3.up) * _movement.LookRotation;
             _movement.ApplyToPlayer();
             fakeGroundCollider.transform.position = position;
 
@@ -76,6 +93,11 @@ namespace Tumble.Scripts {
         public override void InputMoveHorizontal(float value, UdonInputEventArgs args) { _horizontalInput = value; }
 
         public override void InputMoveVertical(float value, UdonInputEventArgs args) { _verticalInput = value; }
+
+        public override void InputLookHorizontal(float value, UdonInputEventArgs args) {
+            // if(Networking.LocalPlayer.IsUserInVR())
+            _horizontalLookInput = value;
+        }
 
         public override void InputJump(bool value, UdonInputEventArgs args) {
             if(!Networking.LocalPlayer.IsUserInVR())

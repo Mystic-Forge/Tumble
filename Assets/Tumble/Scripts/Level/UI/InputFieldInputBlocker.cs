@@ -14,10 +14,10 @@ public class InputFieldInputBlocker : UdonSharpBehaviour
     }
 
     public void OnSelect() {
-        _universe.blockingInputs++;
+        // _universe.blockingInputs++;
     }
     
     public void OnDeselect() {
-        _universe.blockingInputs--;
+        // _universe.blockingInputs--;
     }
 }

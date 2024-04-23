@@ -51,7 +51,7 @@ public class TumbleLevel : UdonSharpBehaviour {
         
         if (!Networking.GetOwner(gameObject).isLocal) return;
 
-        if (Time.time - _lastLevelSyncTime > 5f) {
+        if (Time.time - _lastLevelSyncTime > 60f) {
             RequestSerialization();
             _lastLevelSyncTime = Time.time;
         }
@@ -64,6 +64,10 @@ public class TumbleLevel : UdonSharpBehaviour {
         if(string.IsNullOrEmpty(rawLevelData)) return;
         
         levelData = _loader.DeserializeLevelData(rawLevelData);
+        LoadLevel();
+    }
+    
+    public void LoadLevel() {
         _loader.LoadLevelFromData(this);
     }
 
@@ -127,6 +131,26 @@ public class TumbleLevel : UdonSharpBehaviour {
         }
 
         return null;
+    }
+    
+    public bool RemoveElementAt(Vector3Int cell) {
+        var element = GetElementAt(cell);
+        if (element == null) return false;
+        
+        DestroyImmediate(element);
+        return true;
+    }
+
+    public GameObject AddElement(int elementId, Vector3Int cell, Quaternion rotation) {
+        if (GetElementAt(cell) != null) return null;
+        
+        var holder   = GetElementHolder(elementId);
+        var element  = _loader.levelElements[elementId];
+        var instance = Instantiate(element, holder);
+        instance.transform.localPosition = cell;
+        instance.transform.localRotation = rotation;
+        
+        return instance;
     }
 
     public Vector3Int GetCell(Vector3 worldPosition) {

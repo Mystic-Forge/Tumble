@@ -191,10 +191,6 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                     var version = TakeInt(bytes, ref offset);
                     levelData.Add((int)LevelDataFormatKey.GameVersion, version);
                     break;
-                // case LevelDataFormatKey.LevelID:
-                //     var levelId = TakeInt(bytes, ref offset);
-                //     levelData.Add((int)LevelDataFormatKey.LevelID, levelId);
-                //     break;
                 case LevelDataFormatKey.VRChatUsername:
                     var username = TakeString(bytes, ref offset);
                     levelData.Add((int)LevelDataFormatKey.VRChatUsername, username);
@@ -206,7 +202,6 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                 case LevelDataFormatKey.LevelDescription:
                     var levelDescription = TakeString(bytes, ref offset);
                     levelData.Add((int)LevelDataFormatKey.LevelDescription, levelDescription);
-                    // Debug.Log($"Level Description: {levelDescription}");
                     break;
                 case LevelDataFormatKey.LevelTags:
                     var levelTags = TakeString(bytes, ref offset);
@@ -260,7 +255,6 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
             for (var r = 0; r < rotationCount; r++) {
                 var rotation = TakeInt(bytes, ref offset);
-                Debug.Log($"Rotation: {rotation}");
                 var elements = new DataDictionary();
 
                 var elementCount = TakeInt(bytes, ref offset);

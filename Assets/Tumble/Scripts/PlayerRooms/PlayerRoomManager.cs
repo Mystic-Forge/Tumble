@@ -18,8 +18,13 @@ public class PlayerRoomManager : UdonSharpBehaviour {
 
     private PlayerRoomTracker[] _trackers;
     private TumbleRoom[]        _rooms;
+    
+    public TumbleRoom LocalRoom => localTracker == null ? null : localTracker.currentRoom != -1 ? _rooms[localTracker.currentRoom] : null;
 
+    private Universe _universe;
+    
     void Start() {
+        _universe = GetComponentInParent<Universe>();
         _trackers = GetComponentsInChildren<PlayerRoomTracker>();
         _rooms    = GetComponentsInChildren<TumbleRoom>();
     }
@@ -47,6 +52,7 @@ public class PlayerRoomManager : UdonSharpBehaviour {
 
                 Networking.SetOwner(player, tracker.gameObject);
                 tracker.owned = true;
+                tracker.RequestSerialization();
                 if (player.isLocal) localTracker = tracker;
             }
 
@@ -55,7 +61,10 @@ public class PlayerRoomManager : UdonSharpBehaviour {
                 var endsInS = player.displayName.ToLower()[player.displayName.Length - 1] == 's';
                 room.roomName = player.displayName + (endsInS ? "'" : "'s") + " Room";
                 room.roomType = tracker.requestedRoomType;
+
+                if (room.roomType == RoomType.Level) room.level.levelData = _universe.levelDatabase.GetLevel(tracker.requestingLevelId);
                 room.SetRoomOwner(player);
+                room.RequestSerialization();
 
                 if (player.isLocal)
                     tracker.RoomRequestCompleted();
@@ -91,9 +100,11 @@ public class PlayerRoomManager : UdonSharpBehaviour {
         return null;
     }
 
-    public void RequestRoom(RoomType type) {
+    public void RequestRoom(RoomType type, string levelId = "") {
         localTracker.requestingRoom    = true;
         localTracker.requestedRoomType = type;
+        localTracker.requestingLevelId = levelId;
+        localTracker.RequestSerialization();
     }
 
     public TumbleRoom[] GetOpenRooms() {
@@ -109,5 +120,11 @@ public class PlayerRoomManager : UdonSharpBehaviour {
         for (var j = 0; j < i; j++) finalArray[j] = openRoomArray[j];
 
         return finalArray;
+    }
+    
+    public void LeaveCurrentRoom() {
+        if (localTracker.currentRoom == -1) return;
+        
+        _rooms[localTracker.currentRoom].LeaveRoom();
     }
 }

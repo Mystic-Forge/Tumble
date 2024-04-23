@@ -18,11 +18,6 @@ public class LevelEditor : UdonSharpBehaviour {
     public TumbleLevel level;
     public Transform   synchronizerHolder;
 
-    public InputField levelNameInputField;
-    public InputField levelDescriptionInputField;
-    public InputField levelTagsInputField;
-    public InputField saveLevelDataInputField;
-
     public LevelEditorTool tool;
     
     private LevelEditorSynchronizer[] _synchronizers;
@@ -34,16 +29,31 @@ public class LevelEditor : UdonSharpBehaviour {
     private LevelEditorSynchronizer GetFirstAvailableSynchronizer() {
         for (var i = 0; i < _synchronizers.Length; i++) {
             var synchronizer = _synchronizers[i];
+            
             if (!synchronizer.HasOwner) return synchronizer;
+            
+            // Check if this synchronizer is owned by a player that is no longer in the session
+            var players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
+            VRCPlayerApi.GetPlayers(players);
+            var passed = true;
+            foreach (var p in players) {
+                if (p.displayName == synchronizer.playerName) {
+                    passed = false;
+                    break;
+                }
+            }
+            
+            if (passed) return synchronizer;
         }
 
         return null;
     }
     
     private LevelEditorSynchronizer GetSynchronizer(VRCPlayerApi player) {
+        var name = player.displayName;
         for (var i = 0; i < _synchronizers.Length; i++) {
             var synchronizer = _synchronizers[i];
-            if (synchronizer.IsLocal) return synchronizer;
+            if (synchronizer.playerName == name) return synchronizer;
         }
 
         return null;
@@ -55,59 +65,34 @@ public class LevelEditor : UdonSharpBehaviour {
     }
 
     private void FixedUpdate() {
-        JoinEditors();
-    }
+        if(!Networking.LocalPlayer.isMaster) return; 
+        
+        var players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
+        VRCPlayerApi.GetPlayers(players);
 
-    public void SetLevelName() {
-        level.levelName = levelNameInputField.text;
-    }
-    
-    public void SetLevelDescription() {
-        level.levelDescription = levelDescriptionInputField.text;
-    }
-    
-    public void SetLevelTags() {
-        level.tags = levelTagsInputField.text.Split(' ');
-    }
-    
-    public void SaveLevelData() {
-        level.SaveData();
-        saveLevelDataInputField.text = level.rawLevelData;
-    }
-    
-    public void LoadLevelData() {
-        level.rawLevelData = saveLevelDataInputField.text;
-        level.LoadLevelFromRaw();
-        levelNameInputField.text = level.levelName;
-        levelDescriptionInputField.text = level.levelDescription;
-        levelTagsInputField.text = string.Join(" ", level.tags);
-    }
-
-    public void JoinEditors() {
-        var synchronizer = LocalSynchronizer;
-
-        if (synchronizer != null) {
-            if (Networking.GetOwner(synchronizer.gameObject) != Networking.LocalPlayer) Networking.SetOwner(Networking.LocalPlayer, synchronizer.gameObject); // Rejoin failsafe
-            return;
+        foreach (var p in players) {
+            var synchronizer = GetSynchronizer(p);
+            if(synchronizer != null) continue;
+            
+            var firstAvailableSynchronizer = GetFirstAvailableSynchronizer();
+            if (firstAvailableSynchronizer == null) continue;
+            
+            firstAvailableSynchronizer.playerName = p.displayName;
+            Networking.SetOwner(p, firstAvailableSynchronizer.gameObject);
         }
-
-        synchronizer = GetFirstAvailableSynchronizer();
-        if (synchronizer == null) return;
-
-        synchronizer.playerName = Networking.LocalPlayer.displayName;
-        Networking.SetOwner(Networking.LocalPlayer, synchronizer.gameObject);
     }
 
     public void AddElement(int elementId, Vector3 position, Quaternion rotation) {
         var synchronizer = LocalSynchronizer;
         if (synchronizer == null) return;
 
-        if (_loader.levelElements.Length <= elementId || elementId < 0) return;
+        if (elementId < 0 || elementId >= _loader.levelElements.Length) return;
 
+        var cell         = new Vector3Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y), Mathf.RoundToInt(position.z));
         var positionArray = new DataList();
-        positionArray.Add(Mathf.RoundToInt(position.x));
-        positionArray.Add(Mathf.RoundToInt(position.y));
-        positionArray.Add(Mathf.RoundToInt(position.z));
+        positionArray.Add(cell.x);
+        positionArray.Add(cell.y);
+        positionArray.Add(cell.z);
 
         var change = new DataDictionary();
 
@@ -118,7 +103,7 @@ public class LevelEditor : UdonSharpBehaviour {
 
         synchronizer.SubmitChange(change);
 
-        InstantiateElement(elementId, position, rotation);
+        level.AddElement(elementId, cell, rotation);
     }
     
     public void RemoveElement(GameObject element) => RemoveElement(element.transform.localPosition);
@@ -127,10 +112,11 @@ public class LevelEditor : UdonSharpBehaviour {
         var synchronizer = LocalSynchronizer;
         if (synchronizer == null) return;
 
+        var cell          = new Vector3Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y), Mathf.RoundToInt(position.z));
         var positionArray = new DataList();
-        positionArray.Add(Mathf.RoundToInt(position.x));
-        positionArray.Add(Mathf.RoundToInt(position.y));
-        positionArray.Add(Mathf.RoundToInt(position.z));
+        positionArray.Add(cell.x);
+        positionArray.Add(cell.y);
+        positionArray.Add(cell.z);
 
         var change = new DataDictionary();
 
@@ -138,8 +124,8 @@ public class LevelEditor : UdonSharpBehaviour {
         change["p"] = new DataToken(positionArray);
 
         synchronizer.SubmitChange(change);
-        
-        Destroy(level.GetElementAt(new Vector3Int(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.y), Mathf.RoundToInt(position.z))));
+
+        level.RemoveElementAt(cell);
     }
 
     public void ReceiveChange(DataDictionary change) {
@@ -150,27 +136,14 @@ public class LevelEditor : UdonSharpBehaviour {
                 var elementId     = (int)change["e"].Number;
                 var positionArray = change["p"].DataList;
                 var position      = new Vector3Int((int)positionArray[0].Number, (int)positionArray[1].Number, (int)positionArray[2].Number);
-
-                if (level.GetElementAt(position) != null) return;
-
                 var rotation = TumbleLevelLoader64.DecodeRotation((int)change["r"].Number);
-
-                InstantiateElement(elementId, position, rotation);
+                level.AddElement(elementId, position, rotation);
                 break;
             case LevelEditorChangeType.Remove:
                 var removePositionArray = change["p"].DataList;
                 var removePosition      = new Vector3Int((int)removePositionArray[0].Number, (int)removePositionArray[1].Number, (int)removePositionArray[2].Number);
-                var element            = level.GetElementAt(removePosition);
-                if (element != null) Destroy(element.gameObject);
+                level.RemoveElementAt(removePosition);
                 break;
         }
-    }
-
-    private void InstantiateElement(int elementId, Vector3 position, Quaternion rotation) {
-        var holder   = level.GetElementHolder(elementId);
-        var element  = _loader.levelElements[elementId];
-        var instance = Instantiate(element, holder);
-        instance.transform.localPosition = position;
-        instance.transform.localRotation = rotation;
     }
 }

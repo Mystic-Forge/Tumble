@@ -27,6 +27,11 @@ namespace Tumble.Scripts.Level {
         public float       maxPlaceDistance = 20f;
         public int         elementId        = 0;
 
+        public GameObject laserPointerGhost;
+        public GameObject laserPointer;
+        public GameObject cursor;
+        public GameObject cursorGhost;
+
         public Material outlinePrepareMaterial;
 
         public int paintColor;
@@ -134,26 +139,56 @@ namespace Tumble.Scripts.Level {
             Debug.DrawLine(v011, v010, Color.red);
         }
 
+        private bool  _showLaser;
+        private float _laserLength;
+
+        public override void PostLateUpdate() {
+            laserPointer.SetActive(false);
+            laserPointerGhost.SetActive(false);
+            cursor.SetActive(false);
+            cursorGhost.SetActive(false);
+            
+            if (!_enabled) return;
+
+            _showLaser = Networking.LocalPlayer.IsUserInVR();
+            var ray = _laser.GetPointerRay(HandType.RIGHT, false);
+            var hit = GetRayElement(ray, out var point, out var normal, out var elementId, out var cancel);
+
+            _showLaser &= !cancel;
+            laserPointer.SetActive(_showLaser);
+            laserPointerGhost.SetActive(_showLaser);
+            cursor.SetActive(_showLaser);
+            cursorGhost.SetActive(_showLaser);
+
+            if (_showLaser) {
+                laserPointer.transform.position = ray.origin;
+                laserPointer.transform.rotation = Quaternion.LookRotation(ray.direction);
+                var dist = Vector3.Distance(ray.origin, point);
+                laserPointer.transform.localScale      = new Vector3(1f, 1f, dist);
+                laserPointerGhost.transform.localScale = new Vector3(1f, 1f, maxPlaceDistance);
+            }
+        }
+
         private void LateUpdate() {
-            var newEnabled = editor != null
-                && editor.level != null
+            var newEnabled = editor.level != null
                 && !_universe.BlockInputs
                 && mode != LevelEditorToolMode.Play;
 
             if (newEnabled != _enabled) {
-                _enabled                           = newEnabled;
+                _enabled = newEnabled;
                 _universe.flyMovement.SetFlyActive(_enabled);
             }
 
             if (!_enabled) return;
-
             if (editor.level == null) return;
+
+            if (Input.GetKey(KeyCode.Tab)) return; // This unlocks the cursor in desktop mode so they are likely trying to use UI.
 
             if (Input.GetKeyDown(KeyCode.Alpha1)) SetMode(1);
             if (Input.GetKeyDown(KeyCode.Alpha2)) SetMode(2);
             if (Input.GetKeyDown(KeyCode.Alpha3)) SetMode(3);
             if (Input.GetKeyDown(KeyCode.Alpha4)) SetMode(4);
-
+ 
             var scroll = Input.GetAxis("Mouse ScrollWheel");
             maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + scroll * 5f, 1, 100);
 
@@ -175,21 +210,22 @@ namespace Tumble.Scripts.Level {
             UpdateInputs();
         }
 
-        private void SelectMode() {
+        private bool SelectMode() {
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
             var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
-            if (cancel) return;
+            if (cancel) return false;
 
             if (element != null) selection.Add(new DataToken(element));
 
             DrawOutline(selectOutlineMaterial);
+            return true;
         }
 
 #region Place Mode
-        private void PlaceMode() {
+        private bool PlaceMode() {
             var rightRay   = _laser.GetPointerRay(HandType.RIGHT, false);
             var hitElement = GetRayElement(rightRay, out var position, out var normal, out var elementId, out var cancel);
-            if (cancel) return;
+            if (cancel) return false;
 
             position += normal * 0.1f;
             var levelCell = editor.level.GetCell(position);
@@ -226,6 +262,7 @@ namespace Tumble.Scripts.Level {
 
             VRCGraphics.DrawMeshInstanced(mesh, 0, outlinePrepareMaterial, matrix, 1);
             VRCGraphics.DrawMeshInstanced(mesh, 0, placeOutlineMaterial,   matrix, 1);
+            return true;
         }
 
         private int[] _blockPermutationIndices = new int[] {
@@ -289,24 +326,25 @@ namespace Tumble.Scripts.Level {
         };
 #endregion
 
-        private void BreakMode() {
+        private bool BreakMode() {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
             var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
-            if (cancel) return;
+            if (cancel) return false;
 
             if (element != null) selection.Add(new DataToken(element));
 
             DrawOutline(destroyOutlineMaterial);
 
             if (_useDown && element != null) editor.RemoveElement(element);
+            return true;
         }
 
-        private void PaintMode() {
+        private bool PaintMode() {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
             var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
-            if (cancel) return;
+            if (cancel) return false;
 
             if (element != null) selection.Add(new DataToken(element));
             DrawOutline(selectOutlineMaterial);
@@ -316,16 +354,18 @@ namespace Tumble.Scripts.Level {
                 {
                     var shape = elementId % 10;
                     var color = elementId / 10;
-                    if (paintColor == color) return;
+                    if (paintColor == color) return true;
 
                     var newElementId = paintColor * 10 + shape;
-                    var rotation     = element.transform.localRotation;
                     var position     = element.transform.localPosition;
+                    var rotation     = element.transform.localRotation;
 
                     editor.RemoveElement(element);
                     editor.AddElement(newElementId, position, rotation);
                 }
             }
+
+            return true;
         }
 
         private void DrawOutline(Material material) {
@@ -363,12 +403,6 @@ namespace Tumble.Scripts.Level {
             _useUp   = !value;
         }
 
-        public override void InputLookVertical(float value, UdonInputEventArgs args) {
-            // if (!Networking.LocalPlayer.IsUserInVR()) return;
-
-            // if (mode == LevelEditorToolMode.Place) maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + value * Time.deltaTime * 5f, 1, 100);
-        }
-
         private void UpdateInputs() {
             _useDown = false;
             _useUp   = false;
@@ -394,17 +428,19 @@ namespace Tumble.Scripts.Level {
                     if (h.collider.GetComponentInParent<Canvas>() != null) {
                         point  = h.point;
                         cancel = true;
+                        this.elementId = -1;
                         return null;
                     }
 
                     if (nearest < h.distance) continue;
 
-                    if (editor.level.TryGetHitElement(h, out var element, out elementId)) {
+                    if (editor.level.TryGetHitElement(h, out var element, out var eid)) {
+                        passed         = true;
                         normal         = h.normal;
                         position       = h.point;
                         nearest        = h.distance;
-                        passed         = true;
                         nearestElement = element;
+                        elementId      = eid;
                     }
                 }
 

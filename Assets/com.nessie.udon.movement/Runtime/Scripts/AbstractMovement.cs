@@ -61,7 +61,7 @@ namespace Nessie.Udon.Movement
         // Player
         [PublicAPI] protected Vector3 PlayerPosition;
         [PublicAPI] protected Quaternion PlayerRotation;
-        [PublicAPI] protected Quaternion LookRotation;
+        [PublicAPI] public Quaternion LookRotation;
         [PublicAPI] protected Stance PlayerStance;
         [PublicAPI] protected float CameraScale;
         [PublicAPI] protected float AvatarHeight = 1f;
