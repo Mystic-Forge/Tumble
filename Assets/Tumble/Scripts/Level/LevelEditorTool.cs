@@ -170,15 +170,20 @@ namespace Tumble.Scripts.Level {
         }
 
         private void LateUpdate() {
+            if (Input.GetKeyDown(KeyCode.Tab))
+                SetMode(
+                    (int)(mode == LevelEditorToolMode.Play ? LevelEditorToolMode.Place : LevelEditorToolMode.Play)
+                );
+
             var newEnabled = editor.level != null
                 && !_universe.BlockInputs
                 && mode != LevelEditorToolMode.Play;
-
+            
             if (newEnabled != _enabled) {
                 _enabled = newEnabled;
                 _universe.flyMovement.SetFlyActive(_enabled);
             }
-
+            
             if (!_enabled) return;
             if (editor.level == null) return;
 
@@ -257,7 +262,7 @@ namespace Tumble.Scripts.Level {
             var mesh = _levelLoader.levelElements[index].GetComponentInChildren<MeshFilter>().sharedMesh;
 
             var matrix = new Matrix4x4[] {
-                Matrix4x4.TRS(start, rot, Vector3.one),
+                Matrix4x4.TRS(start + editor.level.transform.position, rot, Vector3.one),
             };
 
             VRCGraphics.DrawMeshInstanced(mesh, 0, outlinePrepareMaterial, matrix, 1);

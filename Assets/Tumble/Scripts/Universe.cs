@@ -55,6 +55,9 @@ public class Universe : UdonSharpBehaviour {
     public override void OnPlayerJoined(VRCPlayerApi player) { player.SetVoiceDistanceFar(250); }
 
     public void BroadcastCustomEvent(string eventName) {
-        foreach (var behavior in GetComponentsInChildren<UdonSharpBehaviour>(true)) behavior.SendCustomEvent(eventName);
+        foreach (var behavior in GetComponentsInChildren<UdonSharpBehaviour>(true)) {
+            if(behavior == null || behavior == this) continue;
+            behavior.SendCustomEvent(eventName);
+        }
     }
 }

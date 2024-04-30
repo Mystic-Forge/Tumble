@@ -2,9 +2,7 @@ Shader "Tumble/MagicGlass-Render"
 {
     Properties
     {
-        _Albedo("Albedo", 2D) = "white" {}
         _Color("Color", Color) = (1, 1, 1, 1)
-        _Height("Height", 2D) = "black" {}
         _NormalMap("Normal Map", 2D) = "bump" {}
         _NormalStrength("Normal Strength", Range(0, 1)) = 0.5
 
@@ -30,9 +28,7 @@ Shader "Tumble/MagicGlass-Render"
         _StarAttenuation("Star Attenuation", Range(0, 1)) = 0.5
         _StarSize("Star Size", Range(0, 1)) = 0.5
 
-        _LightMatcap("Light Matcap", 2D) = "black" {}
         _Roughness("Roughness", Range(0, 1)) = 0.5
-        _Refraction("Refraction", Range(0, 1)) = 0.5
     }
     SubShader
     {
@@ -54,18 +50,12 @@ Shader "Tumble/MagicGlass-Render"
             #pragma vertex vert
             #pragma fragment frag
 
-            #pragma multi_compile_instancing
+            // #pragma multi_compile_instancing
 
             #include "UnityCG.cginc"
 
             sampler2D MagicGlassGrab;
             sampler2D MagicGlassMask;
-
-            sampler2D _Albedo;
-            float4    _Albedo_ST;
-
-            sampler2D _Height;
-            float4    _Height_ST;
 
             sampler2D _NormalMap;
             float4    _NormalMap_ST;
@@ -95,9 +85,7 @@ Shader "Tumble/MagicGlass-Render"
             float  _StarAttenuation;
             float  _StarSize;
 
-            sampler2D _LightMatcap;
             float     _Roughness;
-            float     _Refraction;
 
             struct appdata {
                 float4 vertex : POSITION;
@@ -251,17 +239,10 @@ Shader "Tumble/MagicGlass-Render"
 
             fixed4 frag(v2f i, UNITY_VPOS_TYPE screenPixel : VPOS) : SV_Target
             {
-                float4 albedo = tex2D(_Albedo, i.uv * _Albedo_ST.xy + _Albedo_ST.zw);
-                float4 col = _Color * albedo;
-                // float  height = tex2D(_Height, i.uv * _Height_ST.xy + _Height_ST.zw).r;
-                float starMask = 1;//smoothstep(0, 0.2, height);
-                float2 generatedUv = i.uv; //i.worldPos.xz;
+                float4 col = _Color;
+                float starMask = 1;
+                float2 generatedUv = i.uv;
 
-                // sample the normal map, and decode from the Unity encoding
-                // float4 norm1 = tex2D(_NormalMap, generatedUv * _NormalMap_ST.xy + _NormalMap_ST.zw);
-                // float4 norm2 = tex2D(_NormalMap, generatedUv * _NormalMap_ST.xy + _NormalMap_ST.zw + 0.5);
-                // float  t = cos(abs((_Time[1] * 0.1 + generatedUv.x) % 2 - 1) * UNITY_PI);
-                // half3  tnormal = UnpackNormalWithScale(lerp(norm1, norm2, t), _NormalStrength);
                 float4 normalColor = tex2D(_NormalMap, i.uv * _NormalMap_ST.xy + _NormalMap_ST.zw);
                 float3 normalMap = UnpackNormalWithScale(normalColor, _NormalStrength);
 
@@ -273,14 +254,12 @@ Shader "Tumble/MagicGlass-Render"
                 // Blobs
                 float3 pos = i.localPos;
                 float3 stepDir = mul((float3x3)unity_WorldToObject, normalize(i.worldPos - _WorldSpaceCameraPos)).xyz;
-                // stepDir = refract(stepDir, -worldNormal, _Refraction);
                 float3 step = stepDir * (_BlobDepth / _BlobSteps);
                 float  density = 0;
                 float  influence = _BlobColor.a;
                 [loop]
                 for (int s = 0; s < _BlobSteps; s++) {
                     float sample = sample3DVolume(pos, _BlobDensity, true) > _BlobSize;
-                    // float sample = smoothstep(0.6, 1, sample3DVolume(pos, _BlobDensity, true));
                     density += sample * influence;
                     if(sample > 0.5) break;
                     influence *= _BlobAttenuation;
@@ -297,7 +276,6 @@ Shader "Tumble/MagicGlass-Render"
                 [loop]
                 for (int s = 0; s < _StarSteps; s++) {
                     float sample = sample3DVolume(pos, _StarDensity, false) > _StarSize;
-                    // float sample = smoothstep(0.8, 1, sample3DVolume(pos, _StarDensity));
                     density += sample * influence;
                     if (sample > 0.5) break;
                     influence *= _StarAttenuation;
@@ -305,9 +283,6 @@ Shader "Tumble/MagicGlass-Render"
                 }
                 float3 stars = density * _StarColor;
                 col.rgb += stars * starMask;
-
-                // col.a += density;
-                // col.a = saturate(col.a);
 
                 // Ambient Lighting
                 float3 worldViewDir = normalize(i.worldPos - _WorldSpaceCameraPos);
@@ -333,27 +308,14 @@ Shader "Tumble/MagicGlass-Render"
                 edgeGlow *= _EdgeColor;
                 col.rgb += edgeGlow.rgb;
 
-                // Height glow
-                // col.rgb += (albedo.r > 0.95) * _EdgeColor;
-
                 // Reflection
                 float3 skyColor = SampleEnvironment(i.worldPos, 1 / _Roughness, worldNormal);
                 float  fresnel = pow(dot(reflectedView, worldViewDir) * 0.5 + 0.5, 10);
                 col.rgb += skyColor * fresnel * _ReflectionIntensity;
 
                 // Specular lighting
-                // float3 halfDir = normalize(_WorldSpaceLightPos0.xyz + -worldViewDir);
                 float spec = pow(saturate(dot(reflectedView, _WorldSpaceLightPos0.xyz)), 5000 * _Roughness) * pow(_Roughness, 5);
                 col.rgb += spec;
-
-                // Matcap
-                float2 uvs = mul(UNITY_MATRIX_V, worldNormal).xy * 0.5 + float2(0.5, 0.5);
-                float4 matcap = tex2D(_LightMatcap, uvs);
-                col.rgb += matcap.rgb * 0.02;
-                // col.a = 0.5;
-
-                // float4 background = tex2Dproj(MagicGlassGrab, i.screenPos);
-                // col.rgb = lerp(background.rgb, col.rgb, col.a);
 
                 return col;
             }

@@ -19,8 +19,12 @@ public class PlayerRoomTracker : UdonSharpBehaviour {
     [UdonSynced] public string   requestingLevelId;
 
     private PlayerRoomManager _manager;
+    private Universe         _universe;
 
-    private void Start() { _manager = GetComponentInParent<PlayerRoomManager>(); }
+    private void Start() {
+        _universe = GetComponentInParent<Universe>();
+        _manager = GetComponentInParent<PlayerRoomManager>();
+    }
 
     public override void OnOwnershipTransferred(VRCPlayerApi player) {
         if (!player.isLocal) return;
@@ -35,5 +39,19 @@ public class PlayerRoomTracker : UdonSharpBehaviour {
         requestingRoom = false;
         
         if(Networking.GetOwner(gameObject).isLocal) RequestSerialization();
+    }
+
+    private void FixedUpdate() {
+        var room = _manager.LocalRoom;
+        if (room == null) return;
+
+        // Respawn player if any of their coordinates exceed the room bounds
+        var position = _universe.movement._GetPosition();
+        position -= room.transform.position;
+        if (position.x < room.bounds.min.x || position.x > room.bounds.max.x ||
+            position.y < room.bounds.min.y || position.y > room.bounds.max.y ||
+            position.z < room.bounds.min.z || position.z > room.bounds.max.z) {
+            room.TeleportToRoom();
+        }
     }
 }

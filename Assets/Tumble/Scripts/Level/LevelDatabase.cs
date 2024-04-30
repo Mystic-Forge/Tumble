@@ -22,9 +22,13 @@ public class LevelDatabase : UdonSharpBehaviour {
     private TumbleLevelLoader64 _loader;
 
     private void Start() {
+        LoadLevelDatabase();
+    }
+
+    public void LoadLevelDatabase() {
         Debug.Log($"[TUMBLE] Loading level database");
         _universe = GetComponentInParent<Universe>();
-        _loader = _universe.levelLoader;
+        _loader   = _universe.levelLoader;
         VRCStringDownloader.LoadUrl(url, (IUdonEventReceiver)this);
     }
 
@@ -32,6 +36,7 @@ public class LevelDatabase : UdonSharpBehaviour {
         _rawData = result.Result;
         Debug.Log($"[TUMBLE] Loaded level database: {_rawData.Length} bytes");
         
+        levels.Clear();
         ParseLevels();
     }
 

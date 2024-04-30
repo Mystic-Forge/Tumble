@@ -37,19 +37,23 @@ public class LevelEditorMenu : UdonSharpBehaviour
 
     public void SetLevelName() {
         Level.levelName = levelNameInputField.text;
+        Level.RequestSerialization();
     }
     
     public void SetLevelDescription() {
         Level.levelDescription = levelDescriptionInputField.text;
+        Level.RequestSerialization();
     }
     
     public void SetLevelTags() {
         Level.tags = levelTagsInputField.text.Split(' ');
+        Level.RequestSerialization();
     }
     
     public void SaveLevelData() {
         Level.SaveData();
         saveLevelDataInputField.text = Level.rawLevelData;
+        // Level.RequestSerialization();
     }
     
     public void LoadLevelData() {
@@ -58,6 +62,7 @@ public class LevelEditorMenu : UdonSharpBehaviour
         levelNameInputField.text        = Level.levelName;
         levelDescriptionInputField.text = Level.levelDescription;
         levelTagsInputField.text        = string.Join(" ", Level.tags);
+        Level.RequestSerialization();
     }
 
     public void EventOnRoomLoaded() {

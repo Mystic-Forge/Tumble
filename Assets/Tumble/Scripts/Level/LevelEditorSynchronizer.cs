@@ -60,8 +60,11 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
         if (string.IsNullOrEmpty(changesData)) return;
 
         // If we are not in the same room, we do not care about the change
-        var owner = Networking.GetOwner(gameObject);
-        if (_universe.playerRoomManager.GetTracker(owner).currentRoom != _universe.playerRoomManager.localTracker.currentRoom) return;
+        var owner        = Networking.GetOwner(gameObject);
+        var ownerTracker = _universe.playerRoomManager.GetTracker(owner);
+        var localTracker = _universe.playerRoomManager.localTracker;
+        if(ownerTracker == null || localTracker == null) return;
+        if (ownerTracker.currentRoom != localTracker.currentRoom) return;
 
         if (VRCJson.TryDeserializeFromJson(changesData, out var deserializedChanges)) {
             var changes = deserializedChanges.DataDictionary;
@@ -71,7 +74,10 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
     }
 
     public override void OnOwnershipTransferred(VRCPlayerApi player) {
-        if (player.isLocal && !player.isMaster) playerName = player.displayName;
+        if (player.isLocal && !player.isMaster) {
+            playerName = player.displayName;
+            RequestSerialization();
+        }
     }
 }
 

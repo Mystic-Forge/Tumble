@@ -15,12 +15,12 @@ using Random = UnityEngine.Random;
 
 [UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
 public class TumbleLevel : UdonSharpBehaviour {
-    public int      version = 0;
-    public int      levelIndex;
-    public int      levelId = -1;
-    public string   levelName;
-    public string   levelDescription;
-    public string[] tags;
+    public              int      version = 0;
+    public              int      levelIndex;
+    public              int      levelId = -1;
+    [UdonSynced] public string   levelName;
+    [UdonSynced] public string   levelDescription;
+    [UdonSynced]  public string[] tags;
 
     public string LevelKey => $"l{levelIndex}";
 

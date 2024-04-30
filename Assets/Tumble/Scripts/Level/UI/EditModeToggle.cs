@@ -26,20 +26,18 @@ public class EditModeToggle : UdonSharpBehaviour {
 
     private void Start() { _universe = GetComponentInParent<Universe>(); }
 
-    private void Update() {
-        if (Input.GetKeyDown(KeyCode.Tab)) ToggleEditMode();
+    private void FixedUpdate() {
+        playIcon.SetActive(_universe.levelEditor.tool.mode != LevelEditorToolMode.Play);
+        editIcon.SetActive(!playIcon.activeSelf);
+        
+        playModeUI.SetActive(!playIcon.activeSelf);
+        editModeUI.SetActive(!editIcon.activeSelf);
     }
     
     public void ToggleEditMode() {
         _universe.levelEditor.tool.SetMode(
             (int)(_universe.levelEditor.tool.mode == LevelEditorToolMode.Play ? LevelEditorToolMode.Place : LevelEditorToolMode.Play)
         );
-        
-        playIcon.SetActive(_universe.levelEditor.tool.mode != LevelEditorToolMode.Play);
-        editIcon.SetActive(!playIcon.activeSelf);
-        
-        playModeUI.SetActive(!playIcon.activeSelf);
-        editModeUI.SetActive(!editIcon.activeSelf);
     }
     
     public void EventShowContextMenu() {
