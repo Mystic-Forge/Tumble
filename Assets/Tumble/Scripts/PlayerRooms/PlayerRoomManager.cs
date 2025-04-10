@@ -11,27 +11,20 @@ using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
 
 
-public class PlayerRoomManager : UdonSharpBehaviour {
+public class PlayerRoomManager : TumbleBehaviour {
     public PlayerRoomTracker localTracker;
-
-    public GameObject editorMenu;
 
     private PlayerRoomTracker[] _trackers;
     private TumbleRoom[]        _rooms;
-    
-    public TumbleRoom LocalRoom => localTracker == null ? null : localTracker.currentRoom != -1 ? _rooms[localTracker.currentRoom] : null;
 
-    private Universe _universe;
+    public TumbleRoom LocalTrackerRoom => localTracker == null ? null : localTracker.Room;
     
-    void Start() {
-        _universe = GetComponentInParent<Universe>();
+    private void Start() {
         _trackers = GetComponentsInChildren<PlayerRoomTracker>();
         _rooms    = GetComponentsInChildren<TumbleRoom>();
     }
 
     private void FixedUpdate() {
-        if (localTracker != null) editorMenu.gameObject.SetActive(localTracker.currentRoom != -1 && _rooms[localTracker.currentRoom].roomType == RoomType.Editor);
-
         if (!Networking.LocalPlayer.isMaster) return;
 
         var players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
@@ -62,14 +55,8 @@ public class PlayerRoomManager : UdonSharpBehaviour {
                 room.roomName = player.displayName + (endsInS ? "'" : "'s") + " Room";
                 room.roomType = tracker.requestedRoomType;
 
-                if (room.roomType == RoomType.Level) room.level.levelData = _universe.levelDatabase.GetLevel(tracker.requestingLevelId);
+                if (room.roomType == RoomType.Level) room.level.levelData = Universe.levelDatabase.GetLevel(tracker.requestingLevelId);
                 room.SetRoomOwner(player);
-                room.RequestSerialization();
-
-                if (player.isLocal)
-                    tracker.RoomRequestCompleted();
-                else
-                    tracker.SendCustomNetworkEvent(NetworkEventTarget.Owner, "RoomRequestCompleted");
                 
                 tracker.requestingRoom = false;
             }
@@ -122,9 +109,11 @@ public class PlayerRoomManager : UdonSharpBehaviour {
         return finalArray;
     }
     
+    public TumbleRoom GetRoom(int index) => _rooms[index];
+
     public void LeaveCurrentRoom() {
-        if (localTracker.currentRoom == -1) return;
+        if (LocalRoom == null) return;
         
-        _rooms[localTracker.currentRoom].LeaveRoom();
+        LocalRoom.LeaveRoom();
     }
 }

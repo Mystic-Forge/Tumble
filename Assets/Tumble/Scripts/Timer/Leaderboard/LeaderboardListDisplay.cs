@@ -16,7 +16,6 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
     public Transform  leaderboardList;
     public int        itemsPerPage = 33;
     public int        currentPage;
-    public int        levelIndex;
 
     public int PageCount => Mathf.CeilToInt(_times.Count / (float)itemsPerPage);
 
@@ -26,7 +25,8 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
     [NonSerialized] public ModifiersEnum           ModifiersFilter;
     [NonSerialized] public int                     PlatformFilter = 7;
 
-    public TumbleLevel Level => _universe.GetLevel(levelIndex);
+    // public TumbleLevel Level => _universe.GetLevel(levelIndex);
+    public int levelId = -1;
 
     public TextMeshProUGUI currentPageText;
 
@@ -110,11 +110,9 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
         var times = new DataList();
 
         // Filter by scope
-        var level = Level;
-
         if (scope == LeaderboardScope.All || scope == LeaderboardScope.InWorld) {
             foreach (var leaderboard in _leaderboardManager.Leaderboards) {
-                var time = leaderboard.GetBestLevelTime(level, ModifiersFilter, PlatformFilter);
+                var time = leaderboard.GetBestLevelTime(levelId, ModifiersFilter, PlatformFilter);
 
                 if (time != null) {
                     time                                  = time.ShallowClone();
@@ -123,14 +121,14 @@ public class LeaderboardListDisplay : UdonSharpBehaviour {
                 }
             }
 
-            if (scope == LeaderboardScope.All) times.AddRange(_leaderboardManager.GetVerifiedTimesForLevel(level));
+            if (scope == LeaderboardScope.All) times.AddRange(_leaderboardManager.GetVerifiedTimesForLevel(levelId));
         }
 
         if (scope == LeaderboardScope.MyTimes) {
             var localLeaderboard = _leaderboardManager.LocalLeaderboard;
 
             if (localLeaderboard != null) {
-                foreach (var time in localLeaderboard.GetTimesForLevel(level).ToArray()) {
+                foreach (var time in localLeaderboard.GetTimesForLevel(levelId).ToArray()) {
                     var timeData = time.DataDictionary.ShallowClone();
                     timeData[PlayerLeaderboard.PlayerNameKey] = localLeaderboard.playerName;
                     times.Add(timeData);

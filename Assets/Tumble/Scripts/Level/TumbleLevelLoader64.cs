@@ -19,9 +19,19 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
     public string dataToLoad;
 
+    private DataDictionary _defaultLevelData;
+
     private void Start() {
-        var data = DeserializeLevelData(dataToLoad);
-        Debug.Log(LevelDataToString(data));
+        // var data = DeserializeLevelData(dataToLoad);
+        // Debug.Log(LevelDataToString(data));
+
+        _defaultLevelData = new DataDictionary();
+        _defaultLevelData.Add((int)LevelDataFormatKey.GameVersion,      Universe.Version);
+        _defaultLevelData.Add((int)LevelDataFormatKey.VRChatUsername,   "Tumble");
+        _defaultLevelData.Add((int)LevelDataFormatKey.LevelName,        "Default Level");
+        _defaultLevelData.Add((int)LevelDataFormatKey.LevelDescription, "This is a default level.");
+        _defaultLevelData.Add((int)LevelDataFormatKey.LevelTags,        "");
+        _defaultLevelData.Add((int)LevelDataFormatKey.LevelData,        new DataDictionary());
     }
 
     public GameObject[] levelElements;
@@ -35,10 +45,19 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         return levelElements[elementId];
     }
 
+    public int GetIdOfElement(GameObject element) {
+        for (var i = 0; i < levelElements.Length; i++) {
+            if (levelElements[i] == element)
+                return i;
+        }
+
+        return -1;
+    }
+    
     // ChunkCount
     // ChunkIndex
-    // RotationCount
-    // Rotation
+    // StateCount
+    // State
     // ElementCount
     // ElementId
     // YCount
@@ -63,68 +82,63 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
         var levelData = new DataList(); // byte array
 
-        AddInt(levelData, (int)LevelDataFormatKey.GameVersion);
-        AddInt(levelData, Universe.Version);
+        AddUInt(levelData, (int)LevelDataFormatKey.GameVersion);
+        AddUInt(levelData, Universe.Version);
 
-        // if (level.levelId != -1) {
-            // AddInt(levelData, (int)LevelDataFormatKey.LevelID);
-            // AddInt(levelData, level.levelId);
-        // }
+        AddUInt(levelData, (int)LevelDataFormatKey.VRChatUsername);
+        AddString(levelData, level.Room.GetOwner().displayName);
 
-        AddInt(levelData, (int)LevelDataFormatKey.VRChatUsername);
-        AddString(levelData, level.room.roomOwner);
-
-        AddInt(levelData, (int)LevelDataFormatKey.LevelName);
+        AddUInt(levelData, (int)LevelDataFormatKey.LevelName);
         AddString(levelData, level.levelName);
-        AddInt(levelData, (int)LevelDataFormatKey.LevelDescription);
+        AddUInt(levelData, (int)LevelDataFormatKey.LevelDescription);
         AddString(levelData, level.levelDescription);
-        AddInt(levelData, (int)LevelDataFormatKey.LevelTags);
+        AddUInt(levelData, (int)LevelDataFormatKey.LevelTags);
         AddString(levelData, string.Join(" ", level.tags));
 
         var data      = new DataList(); // byte array
         var chunkKeys = chunks.GetKeys().ToArray();
-        AddInt(data, chunkKeys.Length);
+        AddUInt(data, chunkKeys.Length);
 
         for (var i = 0; i < chunkKeys.Length; i++) {
             var chunkIndex = chunkKeys[i].Int;
-            AddInt(data, chunkIndex);
+            AddUInt(data, chunkIndex);
             var chunk        = chunks[chunkIndex].DataDictionary;
-            var rotationKeys = chunk.GetKeys().ToArray();
-            AddInt(data, rotationKeys.Length);
+            var stateKeys = chunk.GetKeys().ToArray();
+            AddUInt(data, stateKeys.Length);
 
-            for (var r = 0; r < rotationKeys.Length; r++) {
-                var rotationKey = rotationKeys[r].Int;
-                AddInt(data, rotationKey);
+            for (var r = 0; r < stateKeys.Length; r++) {
+                var stateKey = (uint)stateKeys[r].Number;
+                AddUInt(data, stateKey);
 
-                var elements    = chunk[rotationKey].DataDictionary;
+                var elements    = chunk[stateKey].DataDictionary;
                 var elementKeys = elements.GetKeys().ToArray();
-                AddInt(data, elementKeys.Length);
+                AddUInt(data, elementKeys.Length);
 
                 for (var e = 0; e < elementKeys.Length; e++) {
                     var elementKey = elementKeys[e].Int;
-                    AddInt(data, elementKey);
+                    AddUInt(data, elementKey);
 
                     var yPositions = elements[elementKey].DataDictionary;
                     var yKeys      = yPositions.GetKeys().ToArray();
-                    AddInt(data, yKeys.Length);
+                    AddUInt(data, yKeys.Length);
 
                     for (var y = 0; y < yKeys.Length; y++) {
                         var xKey = yKeys[y].Byte;
                         data.Add(xKey);
 
                         var xPositions = yPositions[xKey].DataList;
-                        AddInt(data, xPositions.Count);
+                        AddUInt(data, xPositions.Count);
                         for (var x = 0; x < xPositions.Count; x++) data.Add(xPositions[x]);
                     }
                 }
             }
         }
 
-        AddInt(levelData, (int)LevelDataFormatKey.LevelData);
-        AddInt(levelData, (int)data.Count);
+        AddUInt(levelData, (int)LevelDataFormatKey.LevelData);
+        AddUInt(levelData, (int)data.Count);
         foreach (var b in data.ToArray()) levelData.Add(b);
 
-        AddInt(levelData, (int)LevelDataFormatKey.EndOfData);
+        AddUInt(levelData, (int)LevelDataFormatKey.EndOfData);
 
         var bytes                                          = new byte[levelData.Count];
         for (var i = 0; i < levelData.Count; i++) bytes[i] = (byte)levelData[i].Int;
@@ -152,7 +166,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
         var localPos      = worldPos - chunkPos;
         var locationBytes = new byte[2];
-        locationBytes[0] =  (byte)localPos.x; // XXXXXYYY YYZZZZZ- -ZZZZZYY YYYXXXXX
+        locationBytes[0] =  (byte)localPos.x; // -ZZZZZYY YYYXXXXX
         locationBytes[0] |= (byte)((localPos.y << 5) & 0b11100000);
         locationBytes[1] =  (byte)((localPos.y >> 3) & 0b00000011);
         locationBytes[1] |= (byte)((localPos.z << 2) & 0b11111100);
@@ -160,14 +174,19 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         chunkPosIndex += new Vector3Int(16, 16, 16);
         var chunkIndex = chunkPosIndex.x * 1024 + chunkPosIndex.y * 32 + chunkPosIndex.z;
 
-        var r = EncodeRotation(element.rotation);
-        // Really there are only 24 different rotations, so I will need to optimize this later
+        var  levelElement = element.GetComponent<LevelElement>();
+        uint state;
+
+        if (levelElement != null)
+            state = levelElement.GetState();
+        else
+            state = EncodeRotation(element.rotation);
 
         if (!chunks.ContainsKey(chunkIndex)) chunks.Add(chunkIndex, new DataDictionary());
-        var rotations = chunks[chunkIndex].DataDictionary;
+        var states = chunks[chunkIndex].DataDictionary;
 
-        if (!rotations.ContainsKey(r)) rotations.Add(r, new DataDictionary());
-        var elements = rotations[r].DataDictionary;
+        if (!states.ContainsKey(state)) states.Add(state, new DataDictionary());
+        var elements = states[state].DataDictionary;
 
         if (!elements.ContainsKey(elementId)) elements.Add(elementId, new DataDictionary());
         var xPositions = elements[elementId].DataDictionary;
@@ -179,7 +198,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
     }
 
     public DataDictionary DeserializeLevelData(string data) {
-        var bytes = DecodeStringToBinary(data);
+        var bytes     = DecodeStringToBinary(data);
         var levelData = new DataDictionary();
         var offset    = 0;
 
@@ -220,8 +239,8 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
     public void LoadLevelFromData(TumbleLevel level) {
         level.levelName        = level.levelData[(int)LevelDataFormatKey.LevelName].String;
         level.levelDescription = level.levelData[(int)LevelDataFormatKey.LevelDescription].String;
-        level.tags            = level.levelData[(int)LevelDataFormatKey.LevelTags].String.Split(' ');
-        
+        level.tags             = level.levelData[(int)LevelDataFormatKey.LevelTags].String.Split(' ');
+
         var chunks = level.levelData[(int)LevelDataFormatKey.LevelData].DataDictionary;
 
         var chunkKeys = chunks.GetKeys().ToArray();
@@ -251,10 +270,10 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
             var chunkIndex = TakeInt(bytes, ref offset);
             var chunk      = new DataDictionary();
 
-            var rotationCount = TakeInt(bytes, ref offset);
+            var stateCount = TakeInt(bytes, ref offset);
 
-            for (var r = 0; r < rotationCount; r++) {
-                var rotation = TakeInt(bytes, ref offset);
+            for (var r = 0; r < stateCount; r++) {
+                var state    = TakeInt(bytes, ref offset);
                 var elements = new DataDictionary();
 
                 var elementCount = TakeInt(bytes, ref offset);
@@ -280,7 +299,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                     elements.Add(elementId, yPositions);
                 }
 
-                chunk.Add(rotation, elements);
+                chunk.Add(state, elements);
             }
 
             chunks.Add(chunkIndex, chunk);
@@ -290,18 +309,18 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
     }
 
     private void LoadChunk(DataDictionary chunk, TumbleLevel level, Vector3Int offset) {
-        var rotations = chunk.GetKeys().ToArray();
+        var states = chunk.GetKeys().ToArray();
 
-        for (var r = 0; r < rotations.Length; r++) {
-            var rotationIndex = rotations[r].Int;
-            var rotation      = DecodeRotation(rotationIndex);
+        for (var r = 0; r < states.Length; r++) {
+            var state = states[r];
+            // var rotation      = DecodeRotation(state);
 
-            var elements    = chunk[rotationIndex].DataDictionary;
+            var elements    = chunk[state].DataDictionary;
             var elementKeys = elements.GetKeys().ToArray();
 
             for (var e = 0; e < elementKeys.Length; e++) {
                 var elementId     = elementKeys[e].Int;
-                var elementHolder = level.GetElementHolder(elementId);
+                // var elementHolder = level.GetElementHolder(elementId);
 
                 var yPositions = elements[elementId].DataDictionary;
                 var yKeys      = yPositions.GetKeys().ToArray();
@@ -323,23 +342,22 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
                         var worldPos = localPos + offset;
 
-                        var elementObject = Instantiate(levelElements[elementId], elementHolder);
-                        elementObject.transform.localPosition = worldPos;
-                        elementObject.transform.localRotation = rotation;
+                        level.AddElement(elementId, worldPos, (byte)state.Number);
                     }
                 }
             }
         }
     }
 
-    public static int EncodeRotation(Quaternion rotation) {
+    public static uint EncodeRotation(Quaternion rotation) {
+        // Really there are only 24 different rotations, so I will need to optimize this later
         var rot = new Vector3Int(
             (int)Mathf.Repeat(Mathf.RoundToInt(rotation.eulerAngles.x / 90), 4),
             (int)Mathf.Repeat(Mathf.RoundToInt(rotation.eulerAngles.y / 90), 4),
             (int)Mathf.Repeat(Mathf.RoundToInt(rotation.eulerAngles.z / 90), 4)
         );
 
-        return (int)(rot.x * 16 + rot.y * 4 + rot.z);
+        return (uint)(rot.x * 16 + rot.y * 4 + rot.z);
     }
 
     public static Quaternion DecodeRotation(int rotation) {
@@ -350,7 +368,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
     }
 
     public static void AddString(DataList data, string value) {
-        AddInt(data, value.Length);
+        AddUInt(data, (uint)value.Length);
 
         for (var i = 0; i < value.Length; i++) {
             var c = value[i];
@@ -372,8 +390,10 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         return result;
     }
 
-    private static void AddInt(DataList data, int value) {
-        var encoded = EncodeInt32(value);
+    private static void AddUInt(DataList data, int value) => AddUInt(data, (uint)value);
+    
+    private static void AddUInt(DataList data, uint value) {
+        var encoded = EncodeUInt32(value);
         for (var i = 0; i < encoded.Length; i++) data.Add(encoded[i]);
     }
 
@@ -432,7 +452,11 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         var offset = 0;
 
         for (var i = 0; i < data.Length; i += 4) {
-            var chunk = (FromBase64(data[i]) << 18) | (FromBase64(data[i + 1]) << 12) | (i + 2 < data.Length ? FromBase64(data[i + 2]) << 6 : 0) | (i + 3 < data.Length ? FromBase64(data[i + 3]) : 0);
+            var chunk = (FromBase64(data[i]) << 18)
+                | (FromBase64(data[i + 1]) << 12)
+                | (i + 2 < data.Length ? FromBase64(data[i + 2]) << 6 : 0)
+                | (i + 3 < data.Length ? FromBase64(data[i + 3]) : 0);
+
             result[offset++] = (byte)((chunk >> 16) & 255);
             if (i + 2 < data.Length) result[offset++] = (byte)((chunk >> 8) & 255);
             if (i + 3 < data.Length) result[offset++] = (byte)(chunk & 255);
@@ -483,7 +507,8 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                 newString           += $"{EncodeInt32Base64(offset)}{EncodeInt32Base64(length)}{input[currentIndex + longestMatchLength]}";
                 currentIndex        += longestMatchLength + 1;
                 lastBlockStartIndex =  newString.Length;
-            } else {
+            }
+            else {
                 newString += input[currentIndex];
                 currentIndex++;
                 lastBlockSize++;
@@ -530,7 +555,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
             ) {
                 // Debug.Log("Match: " + longestMatchLength + " at " + longestMatchIndex + " from " + currentIndex);
                 var d         = newData.GetRange(0, lastBlockStartIndex);
-                var blockSize = EncodeInt32(lastBlockSize);
+                var blockSize = EncodeUInt32(lastBlockSize);
                 for (var i = 0; i < blockSize.Length; i++) d.Add(blockSize[i]);
                 d.AddRange(newData.GetRange(lastBlockStartIndex, currentLength - lastBlockStartIndex));
                 newData = d;
@@ -540,14 +565,15 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
                 var offset      = newData.Count - longestMatchIndex;
                 var length      = longestMatchLength;
-                var offsetBytes = EncodeInt32(offset);
+                var offsetBytes = EncodeUInt32(offset);
                 for (var i = 0; i < offsetBytes.Length; i++) newData.Add(offsetBytes[i]);
-                var lengthBytes = EncodeInt32(length);
+                var lengthBytes = EncodeUInt32(length);
                 for (var i = 0; i < lengthBytes.Length; i++) newData.Add(lengthBytes[i]);
 
                 currentIndex        += longestMatchLength;
                 lastBlockStartIndex =  newData.Count;
-            } else {
+            }
+            else {
                 newData.Add(input[currentIndex]);
                 currentIndex++;
                 lastBlockSize++;
@@ -556,7 +582,7 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
 
         // Insert the block size at the block offset
         var d1         = newData.GetRange(0, lastBlockStartIndex);
-        var blockSize1 = EncodeInt32(lastBlockSize);
+        var blockSize1 = EncodeUInt32(lastBlockSize);
         for (var i = 0; i < blockSize1.Length; i++) d1.Add(blockSize1[i]);
         d1.AddRange(newData.GetRange(lastBlockStartIndex, newData.Count - lastBlockStartIndex));
         newData = d1;
@@ -579,7 +605,8 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                 result += data[i];
                 blockLength--;
                 if (blockLength == 0) inBlock = false;
-            } else {
+            }
+            else {
                 var a0          = FromBase64(data[i]);
                 var a1          = FromBase64(data[i + 1]);
                 var a           = a0 | ((a1 << 6) & 0b11000000);
@@ -615,7 +642,8 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                 offset++;
                 blockLength--;
                 if (blockLength == 0) inBlock = false;
-            } else {
+            }
+            else {
                 var wordOffsetOriginal = offset;
                 var wordOffset         = TakeInt(data, ref offset);
                 var wordLength         = TakeInt(data, ref offset);
@@ -635,7 +663,9 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
         return finalResult;
     }
 
-    public static byte[] EncodeInt32(int value) {
+    public static byte[] EncodeUInt32(int value) => EncodeUInt32((uint)value);
+    
+    public static byte[] EncodeUInt32(uint value) {
         var list = new DataList();
 
         if (value < 0) Debug.LogError("Cannot encode negative integers to variable length byte arrays");
@@ -645,7 +675,8 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
             value >>= 7;
             if (value > 0) lowest7Bits |= 128;
             list.Add(lowest7Bits);
-        } while (value > 0);
+        }
+        while (value > 0);
 
         var result                                     = new byte[list.Count];
         for (var i = 0; i < list.Count; i++) result[i] = list[i].Byte;
@@ -682,7 +713,8 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
             value >>= 5;
             if (value > 0) lowest5Bits |= 32;
             list.Add(lowest5Bits);
-        } while (value > 0);
+        }
+        while (value > 0);
 
         var result                                  = "";
         for (var i = 0; i < list.Count; i++) result += ToBase64(list[i].Byte);
@@ -721,7 +753,8 @@ public class TumbleLevelLoader64 : UdonSharpBehaviour {
                 value >>= 7;
                 if (value > 0) lowest7Bits |= 128;
                 result.Add(lowest7Bits);
-            } while (value > 0);
+            }
+            while (value > 0);
         }
 
         var finalResult                                       = new byte[result.Count];

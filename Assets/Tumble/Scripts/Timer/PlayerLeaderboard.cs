@@ -91,12 +91,16 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
 
     public void StartLevel(TumbleLevel level) {
         currentLevel      = level;
-        currentLevelIndex = level.levelIndex;
+        currentLevelIndex = level.levelId;
         currentTime       = 0;
         isRunning         = true;
     }
+    
+    public void StopTimer() {
+        isRunning         = false;
+    }
 
-    public void SaveTime() {
+    public void FinishLevel() {
         if (!isRunning) return;
 
         isRunning = false;
@@ -125,13 +129,13 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
                 + $"{playerName} completed level {currentLevelIndex + 1} in {GetFormattedTime(GetTimeFromData(timeToken))}");
     }
 
-    public DataDictionary GetBestLevelTime(TumbleLevel level, ModifiersEnum modifierMask, int platformMask) {
-        if (level == null) return null;
+    public DataDictionary GetBestLevelTime(int levelId, ModifiersEnum modifierMask, int platformMask) {
+        if (levelId == -1) return null;
 
         var            bestTime  = float.MaxValue;
         DataDictionary bestToken = null;
 
-        foreach (var timeToken in GetTimesForLevel(level).ToArray()) {
+        foreach (var timeToken in GetTimesForLevel(levelId).ToArray()) {
             var modifiers = (int)GetModifiersFromData(timeToken);
             var filter    = (int)modifierMask;
 
@@ -150,14 +154,14 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
         return bestToken;
     }
 
-    public DataList GetTimesForLevel(TumbleLevel level) {
-        if (level == null) return new DataList();
+    public DataList GetTimesForLevel(int levelId) {
+        if (levelId == -1) return new DataList();
 
         var times = new DataList();
 
         foreach (var timeToken in _times.ToArray()) {
-            if (GetLevelIndexFromData(timeToken) != level.levelIndex) continue;
-            if (GetLevelVersionFromData(timeToken) != level.version) continue;
+            if (GetLevelIdFromData(timeToken) != levelId) continue;
+            // if (GetLevelVersionFromData(timeToken) != level.version) continue;
             if (GetTumbleVersionFromData(timeToken) != Universe.Version) continue;
 
             times.Add(timeToken);
@@ -169,7 +173,7 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
     private static DataDictionary GetTimeToken(TumbleLevel level, float time, ModifiersEnum modifiers) {
         var token = new DataDictionary();
 
-        token[LevelIdKey]       = new DataToken(level.levelIndex);
+        token[LevelIdKey]       = new DataToken(level.levelId);
         token[LevelVersionKey]  = new DataToken(level.version);
         token[TumbleVersionKey] = new DataToken(Universe.Version);
         token[TimeKey]          = new DataToken(time);
@@ -180,11 +184,9 @@ public class PlayerLeaderboard : UdonSharpBehaviour {
         return token;
     }
 
-    public static int GetLevelIndexFromData(DataToken token) {
+    public static int GetLevelIdFromData(DataToken token) {
         var data = token.DataDictionary[LevelIdKey];
-        if (data.TokenType == TokenType.Double) return (int)data.Double;
-
-        return token.DataDictionary[LevelIdKey].Int;
+        return (int)data.Number;
     }
 
     public static int GetLevelVersionFromData(DataToken token) {

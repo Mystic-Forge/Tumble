@@ -47,14 +47,14 @@ namespace Tumble.Scripts {
             if (!isActive || _universe.BlockInputs) return;
 
             var position = _lastPosition;
-            var delta    = _movement._GetPosition() - _lastPosition;
+            var delta    = Networking.LocalPlayer.GetPosition() - _lastPosition;
             if (delta.magnitude > 1f) { // Probably teleported
-                position = _movement._GetPosition();
+                position      = Networking.LocalPlayer.GetPosition();
                 _lastPosition = position;
                 return;
             }
 
-            var input          = new Vector3(_horizontalInput, _upInput ? 1 : 0, _verticalInput).normalized;
+            var input          = new Vector3(_horizontalInput, _upInput ? 1 : 0, _verticalInput);
 
             var headOriented = !Networking.LocalPlayer.IsUserInVR();
 
@@ -87,7 +87,7 @@ namespace Tumble.Scripts {
         public override void OnPlayerRespawn(VRCPlayerApi player) {
             if (!player.isLocal) return;
 
-            _lastPosition = _movement._GetPosition();
+            _lastPosition = Networking.LocalPlayer.GetPosition();
         }
 
         public override void InputMoveHorizontal(float value, UdonInputEventArgs args) { _horizontalInput = value; }

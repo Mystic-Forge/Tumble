@@ -22,7 +22,7 @@ Shader "Tumble/Basic Outline"
 
         Pass
         {
-            Cull Back
+            Cull Off
             ZWrite Off
             ZTest Always
             

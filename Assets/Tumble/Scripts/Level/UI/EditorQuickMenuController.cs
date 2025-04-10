@@ -11,14 +11,16 @@ using VRC.Udon;
 
 
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-public class EditorQuickMenuController : UdonSharpBehaviour {
+public class EditorQuickMenuController : TumbleBehaviour {
     public GameObject editorQuickMenu;
     public GameObject paintSelector;
     public GameObject toolSelector;
+    public Transform  elementHolder;
 
-    private Universe _universe;
-
-    void Start() { _universe = GetComponentInParent<Universe>(); }
-
-    private void FixedUpdate() { paintSelector.SetActive(_universe.levelEditor.tool.mode == LevelEditorToolMode.Paint || _universe.levelEditor.tool.mode == LevelEditorToolMode.Place); }
+    private void FixedUpdate() {
+        var mode = Universe.levelEditor.tool.mode;
+        elementHolder.gameObject.SetActive(mode == LevelEditorToolMode.Place);
+        var currentElement = Universe.levelEditor.tool.elementId;
+        paintSelector.SetActive(mode == LevelEditorToolMode.Paint || (mode == LevelEditorToolMode.Place && currentElement == 0));
+    }
 }

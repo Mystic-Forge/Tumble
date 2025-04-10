@@ -1,75 +1,74 @@
-﻿
-using System;
+﻿using System;
 
 using UdonSharp;
+
 using UnityEngine;
 using UnityEngine.UI;
 
 using VRC.SDKBase;
 using VRC.Udon;
 
+
 [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-public class LevelEditorMenu : UdonSharpBehaviour
-{
+public class LevelEditorMenu : TumbleBehaviour {
     public InputField levelNameInputField;
     public InputField levelDescriptionInputField;
     public InputField levelTagsInputField;
     public InputField saveLevelDataInputField;
     public GameObject levelDataPanel;
 
-    private Universe    _universe;
-    private LevelEditor _editor;
-    private TumbleLevel Level => _editor == null ? null : _editor.level;
-
-    private void Start() {
-        _universe = GetComponentInParent<Universe>();
-        _editor   = _universe.levelEditor;
+    public void SetLevelName() {
+        LocalLevel.levelName = levelNameInputField.text;
+        LocalLevel.RequestSerialization();
     }
 
-    private void FixedUpdate() {
-        var localRoom = _universe.playerRoomManager.LocalRoom;
-        var isOwner   = localRoom == null ? false : localRoom.LocalIsRoomOwner;
+    public void SetLevelDescription() {
+        LocalLevel.levelDescription = levelDescriptionInputField.text;
+        LocalLevel.RequestSerialization();
+    }
+
+    public void SetLevelTags() {
+        LocalLevel.tags = levelTagsInputField.text.Split(' ');
+        LocalLevel.RequestSerialization();
+    }
+
+    public void SaveLevelData() {
+        LocalLevel.SaveData();
+        saveLevelDataInputField.text = LocalLevel.rawLevelData;
+    }
+
+    public void LoadLevelData() {
+        LocalLevel.rawLevelData = saveLevelDataInputField.text;
+        LocalLevel.LoadLevelFromRaw();
+        levelNameInputField.text        = LocalLevel.levelName;
+        levelDescriptionInputField.text = LocalLevel.levelDescription;
+        levelTagsInputField.text        = string.Join(" ", LocalLevel.tags);
+        LocalLevel.RequestSerialization();
+    }
+
+    public void EventRoomLoaded() {
+        gameObject.SetActive(LocalRoom.roomType == RoomType.Editor);
+        if (!gameObject.activeSelf) return;
+
+        UpdateFields();
+    }
+    
+    public void EventRoomUnloaded() {
+        gameObject.SetActive(false);
+    }
+    
+    public void EventRoomOwnerChanged() {
+        UpdateFields();
+    }
+
+    public void UpdateFields() {
+        var isOwner = LocalRoom.LocalIsOwner;
         levelDataPanel.SetActive(isOwner);
         levelNameInputField.interactable        = isOwner;
         levelDescriptionInputField.interactable = isOwner;
         levelTagsInputField.interactable        = isOwner;
-    }
-
-    public void SetLevelName() {
-        Level.levelName = levelNameInputField.text;
-        Level.RequestSerialization();
-    }
-    
-    public void SetLevelDescription() {
-        Level.levelDescription = levelDescriptionInputField.text;
-        Level.RequestSerialization();
-    }
-    
-    public void SetLevelTags() {
-        Level.tags = levelTagsInputField.text.Split(' ');
-        Level.RequestSerialization();
-    }
-    
-    public void SaveLevelData() {
-        Level.SaveData();
-        saveLevelDataInputField.text = Level.rawLevelData;
-        // Level.RequestSerialization();
-    }
-    
-    public void LoadLevelData() {
-        Level.rawLevelData = saveLevelDataInputField.text;
-        Level.LoadLevelFromRaw();
-        levelNameInputField.text        = Level.levelName;
-        levelDescriptionInputField.text = Level.levelDescription;
-        levelTagsInputField.text        = string.Join(" ", Level.tags);
-        Level.RequestSerialization();
-    }
-
-    public void EventOnRoomLoaded() {
-        if (Level == null) return;
-        
-        levelNameInputField.text        = Level.levelName;
-        levelDescriptionInputField.text = Level.levelDescription;
-        levelTagsInputField.text        = string.Join(" ", Level.tags);
+        levelNameInputField.text                = LocalLevel.levelName;
+        levelDescriptionInputField.text         = LocalLevel.levelDescription;
+        levelTagsInputField.text                = string.Join(" ", LocalLevel.tags);
     }
 }

@@ -12,7 +12,7 @@ public class LeaderboardLevelSelect : UdonSharpBehaviour {
     public void UpdateLevel() {
         var dropdown    = GetComponent<Dropdown>();
         var leaderboard = GetComponentInParent<LeaderboardListDisplay>();
-        leaderboard.levelIndex = dropdown.value;
+        leaderboard.levelId = dropdown.value;
         leaderboard.UpdateData();
     }
 }

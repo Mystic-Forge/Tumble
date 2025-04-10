@@ -6,11 +6,12 @@ using UnityEngine;
 
 using VRC.SDKBase;
 using VRC.Udon;
+using VRC.Udon.Common;
 
 
 [UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
-public class PlayerRoomTracker : UdonSharpBehaviour {
-    [UdonSynced] public int currentRoom = -1;
+public class PlayerRoomTracker : TumbleBehaviour {
+    [UdonSynced] private int _currentRoom = -1;
 
     [UdonSynced] public bool owned;
 
@@ -18,21 +19,15 @@ public class PlayerRoomTracker : UdonSharpBehaviour {
     [UdonSynced] public RoomType requestedRoomType;
     [UdonSynced] public string   requestingLevelId;
 
-    private PlayerRoomManager _manager;
-    private Universe         _universe;
-
-    private void Start() {
-        _universe = GetComponentInParent<Universe>();
-        _manager = GetComponentInParent<PlayerRoomManager>();
-    }
-
+    public TumbleRoom Room => _currentRoom == -1 ? null : Universe.playerRoomManager.GetRoom(_currentRoom);
+    
     public override void OnOwnershipTransferred(VRCPlayerApi player) {
         if (!player.isLocal) return;
 
         owned = !Networking.LocalPlayer.isMaster;
         RequestSerialization();
 
-        if (owned) _manager.localTracker = this;
+        if (owned) Universe.playerRoomManager.localTracker = this;
     }
     
     public void RoomRequestCompleted() {
@@ -40,13 +35,25 @@ public class PlayerRoomTracker : UdonSharpBehaviour {
         
         if(Networking.GetOwner(gameObject).isLocal) RequestSerialization();
     }
+    
+    public void SetRoom(int roomIndex) {
+        _currentRoom = roomIndex;
+        if(roomIndex != -1)
+            Universe.BroadcastCustomEvent("EventRoomUsersUpdated");
+        RequestSerialization();
+    }
+
+    public override void OnDeserialization(DeserializationResult result) {
+        if(LocalRoom == null) return;
+        if (_currentRoom == LocalRoom.Index) Universe.BroadcastCustomEvent("EventRoomUsersUpdated");
+    }
 
     private void FixedUpdate() {
-        var room = _manager.LocalRoom;
+        var room = LocalRoom;
         if (room == null) return;
 
         // Respawn player if any of their coordinates exceed the room bounds
-        var position = _universe.movement._GetPosition();
+        var position = Universe.movement._GetPosition();
         position -= room.transform.position;
         if (position.x < room.bounds.min.x || position.x > room.bounds.max.x ||
             position.y < room.bounds.min.y || position.y > room.bounds.max.y ||

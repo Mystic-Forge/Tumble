@@ -9,10 +9,10 @@ using VRC.SDK3.Data;
 using VRC.SDKBase;
 
 
-public class LeaderboardManager : UdonSharpBehaviour {
-    [SerializeField]                                    private string[] verifiedTimesJson;
+public class LeaderboardManager : TumbleBehaviour {
+    [SerializeField] private string[] verifiedTimesJson;
     [SerializeField] public  VRCUrl[] replayUrls;
-    public                                                      DataList verifiedTimes;
+    public                   DataList verifiedTimes;
 
     public PlayerLeaderboard LocalLeaderboard => GetLeaderboard(Networking.LocalPlayer);
 
@@ -89,13 +89,35 @@ public class LeaderboardManager : UdonSharpBehaviour {
         }
     }
 
-    public DataList GetVerifiedTimesForLevel(TumbleLevel level) {
+    public DataList GetVerifiedTimesForLevel(int levelId) {
         var times = new DataList();
 
-        foreach (var time in verifiedTimes.ToArray())
-            if (PlayerLeaderboard.GetLevelIndexFromData(time) == level.levelIndex)
+        foreach (var time in verifiedTimes.ToArray()) {
+            if (PlayerLeaderboard.GetLevelIdFromData(time) == levelId)
                 times.Add(time);
+        }
 
         return times;
+    }
+
+    public void EventLevelReset() {
+        var leaderboard = LocalLeaderboard;
+        if (leaderboard == null) return;
+        
+        leaderboard.StopTimer();
+    }
+    
+    public void EventLevelStarted() {
+        var leaderboard = LocalLeaderboard;
+        if (leaderboard == null) return;
+
+        leaderboard.StartLevel(LocalLevel);
+    }
+    
+    public void EventLevelEnded() {
+        var leaderboard = LocalLeaderboard;
+        if (leaderboard == null) return;
+
+        leaderboard.FinishLevel();
     }
 }

@@ -11,30 +11,17 @@ using VRC.Udon.Common;
 
 
 [UdonBehaviourSyncMode(BehaviourSyncMode.Manual)]
-public class LevelEditorSynchronizer : UdonSharpBehaviour {
-    [UdonSynced] public string playerName;
+public class LevelEditorSynchronizer : SyncedTumbleBehaviour {
     [UdonSynced] public string changesData;
 
     public LevelEditor editor;
 
-    public bool HasOwner => !string.IsNullOrWhiteSpace(playerName); // && Networking.GetOwner(gameObject).displayName == playerName;
-
-    public bool IsLocal => playerName == Networking.LocalPlayer.displayName;
+    public bool HasOwner => ownerId != -1;
 
     private DataDictionary _localChanges = new DataDictionary();
 
-    private Universe _universe;
-
     private void Start() {
-        _universe = GetComponentInParent<Universe>();
-
         _localChanges.Add("c", new DataList());
-    }
-
-    private void FixedUpdate() {
-        var owner                                                    = Networking.GetOwner(gameObject);
-        if (!owner.isMaster && owner.isLocal && !IsLocal) playerName = Networking.LocalPlayer.displayName;
-        if (IsLocal && !owner.isLocal) Networking.SetOwner(Networking.LocalPlayer, gameObject);
     }
 
     public void SubmitChange(DataDictionary change) {
@@ -56,15 +43,15 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
 
     public override void OnPostSerialization(SerializationResult result) => _localChanges["c"].DataList.Clear();
 
-    public override void OnDeserialization(DeserializationResult result) {
+    public override void OnDeserialized(DeserializationResult result) {
         if (string.IsNullOrEmpty(changesData)) return;
 
         // If we are not in the same room, we do not care about the change
-        var owner        = Networking.GetOwner(gameObject);
-        var ownerTracker = _universe.playerRoomManager.GetTracker(owner);
-        var localTracker = _universe.playerRoomManager.localTracker;
+        var owner        = GetOwner();
+        var ownerTracker = Universe.playerRoomManager.GetTracker(owner);
+        var localTracker = Universe.playerRoomManager.localTracker;
         if(ownerTracker == null || localTracker == null) return;
-        if (ownerTracker.currentRoom != localTracker.currentRoom) return;
+        if (ownerTracker.Room != LocalRoom) return;
 
         if (VRCJson.TryDeserializeFromJson(changesData, out var deserializedChanges)) {
             var changes = deserializedChanges.DataDictionary;
@@ -72,16 +59,11 @@ public class LevelEditorSynchronizer : UdonSharpBehaviour {
             foreach (var change in changes["c"].DataList.ToArray()) editor.ReceiveChange(change.DataDictionary);
         }
     }
-
-    public override void OnOwnershipTransferred(VRCPlayerApi player) {
-        if (player.isLocal && !player.isMaster) {
-            playerName = player.displayName;
-            RequestSerialization();
-        }
-    }
 }
 
 public enum LevelEditorChangeType {
     Add,
     Remove,
+    Move,
+    SetState,
 }

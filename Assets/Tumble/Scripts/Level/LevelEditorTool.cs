@@ -16,7 +16,7 @@ using Mesh = UnityEngine.Mesh;
 
 namespace Tumble.Scripts.Level {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-    public class LevelEditorTool : UdonSharpBehaviour {
+    public class LevelEditorTool : TumbleBehaviour {
         private const int MaxBlockSize = 3;
 
         public DataList selection;
@@ -27,10 +27,13 @@ namespace Tumble.Scripts.Level {
         public float       maxPlaceDistance = 20f;
         public int         elementId        = 0;
 
+        public float LaserLength => mode == LevelEditorToolMode.Place ? maxPlaceDistance : 64f;
+
         public GameObject laserPointerGhost;
         public GameObject laserPointer;
         public GameObject cursor;
         public GameObject cursorGhost;
+        public Transform  gizmoHolder;
 
         public Material outlinePrepareMaterial;
 
@@ -43,7 +46,6 @@ namespace Tumble.Scripts.Level {
         public bool debugBlockPermutations;
         public bool generatePermutations;
 
-        private Universe            _universe;
         private DualLaser           _laser;
         private TumbleLevelLoader64 _levelLoader;
 
@@ -62,13 +64,15 @@ namespace Tumble.Scripts.Level {
         private bool _useDown;
         private bool _useHold;
         private bool _useUp;
+        private bool _grabDown;
+        private bool _grabHold;
+        private bool _grabUp;
 
         private bool _enabled;
 
         private void Start() {
-            _universe    = GetComponentInParent<Universe>();
-            _laser       = _universe.dualLaser;
-            _levelLoader = _universe.levelLoader;
+            _laser       = Universe.dualLaser;
+            _levelLoader = Universe.levelLoader;
             SetElement(0);
             SetMode(0);
 
@@ -88,7 +92,7 @@ namespace Tumble.Scripts.Level {
         }
 
         private void Update() {
-            if (_universe.BlockInputs) return;
+            if (Universe.BlockInputs) return;
 
             if (debugBlockPermutations) {
                 var x = 0;
@@ -147,12 +151,12 @@ namespace Tumble.Scripts.Level {
             laserPointerGhost.SetActive(false);
             cursor.SetActive(false);
             cursorGhost.SetActive(false);
-            
+
             if (!_enabled) return;
 
             _showLaser = Networking.LocalPlayer.IsUserInVR();
             var ray = _laser.GetPointerRay(HandType.RIGHT, false);
-            var hit = GetRayElement(ray, out var point, out var normal, out var elementId, out var cancel);
+            var hit = GetRayElement(LevelEditorToolMode.Select, ray, out var point, out var normal, out var elementId, out var cancel);
 
             _showLaser &= !cancel;
             laserPointer.SetActive(_showLaser);
@@ -175,25 +179,34 @@ namespace Tumble.Scripts.Level {
                     (int)(mode == LevelEditorToolMode.Play ? LevelEditorToolMode.Place : LevelEditorToolMode.Play)
                 );
 
+            for (var i = 0; i < gizmoHolder.childCount; i++) gizmoHolder.GetChild(i).gameObject.SetActive(false);
+
             var newEnabled = editor.level != null
-                && !_universe.BlockInputs
+                && !Universe.BlockInputs
                 && mode != LevelEditorToolMode.Play;
-            
+
             if (newEnabled != _enabled) {
                 _enabled = newEnabled;
-                _universe.flyMovement.SetFlyActive(_enabled);
+                Universe.flyMovement.SetFlyActive(_enabled);
             }
-            
-            if (!_enabled) return;
-            if (editor.level == null) return;
 
-            if (Input.GetKey(KeyCode.Tab)) return; // This unlocks the cursor in desktop mode so they are likely trying to use UI.
+            if (!_enabled
+                || editor.level == null
+                || Input.GetKey(KeyCode.Tab) // This unlocks the cursor in desktop mode so they are likely trying to use UI.
+               ) {
+                UpdateInputs(); // Stops phantom clicks when entering edit mode
+                return;
+            }
+
+            // R-Click for grab
+            _grabDown |= Input.GetMouseButtonDown(1);
+            _grabUp   |= Input.GetMouseButtonUp(1);
 
             if (Input.GetKeyDown(KeyCode.Alpha1)) SetMode(1);
             if (Input.GetKeyDown(KeyCode.Alpha2)) SetMode(2);
             if (Input.GetKeyDown(KeyCode.Alpha3)) SetMode(3);
             if (Input.GetKeyDown(KeyCode.Alpha4)) SetMode(4);
- 
+
             var scroll = Input.GetAxis("Mouse ScrollWheel");
             maxPlaceDistance = Mathf.Clamp(maxPlaceDistance + scroll * 5f, 1, 100);
 
@@ -215,40 +228,247 @@ namespace Tumble.Scripts.Level {
             UpdateInputs();
         }
 
+        private LevelEditorGizmo _currentGizmo;
+
         private bool SelectMode() {
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
+
+            var element = GetRayElement(LevelEditorToolMode.Select,
+                rightRay,
+                out var point,
+                out var normal,
+                out var hitElementId,
+                out var cancel,
+                hitTriggers: true);
+
             if (cancel) return false;
 
-            if (element != null) selection.Add(new DataToken(element));
+            // Remove null selection elements
+            for (var i = selection.Count - 1; i >= 0; i--)
+                if (selection[i].Reference == null) selection.RemoveAt(i);
+            
+            if (selection.Count == 1) DoGizmo(rightRay, point, (GameObject)selection[0].Reference); // Do this before getting gizmo because it wont be active yet otherwise
+
+            if (_grabHold || Input.GetMouseButton(1)) {
+                if (_grabDown) StartGrab();
+
+                DoGrab(rightRay);
+
+                if (_grabUp) EndGrab();
+            }
+            else {
+                if (_useDown) {
+                    _currentGizmo = GetGizmo(rightRay, out var gizmoHitPoint);
+
+                    if (_currentGizmo != null) _currentGizmo.OnClickGizmo(rightRay, gizmoHitPoint);
+                    else
+                        if (element != null) {
+                            var data      = new DataToken(element);
+                            var contained = selection.Contains(data);
+
+                            if (!contained)
+                                selection.Add(data);
+                            else
+                                selection.Remove(data);
+                        }
+                }
+
+                if (_currentGizmo != null && _useHold) _currentGizmo.OnDragGizmo(rightRay);
+
+                if (_currentGizmo != null && _useUp) _currentGizmo.OnReleaseGizmo(rightRay);
+            }
 
             DrawOutline(selectOutlineMaterial);
             return true;
         }
 
+        private LevelEditorGizmo GetGizmo(Ray ray, out Vector3 point) {
+            var hits = Physics.RaycastAll(ray, LaserLength);
+
+            foreach (var hit in hits) {
+                if (hit.collider == null) continue;
+
+                var gizmo = hit.collider.GetComponentInParent<LevelEditorGizmo>();
+
+                if (gizmo != null) {
+                    point = hit.point;
+                    return gizmo;
+                }
+            }
+
+            point = Vector3.zero;
+            return null;
+        }
+
+        private void DoGizmo(Ray ray, Vector3 hitPoint, GameObject element) {
+            var id = TumbleLevel.GetElementId(element);
+            for (var i = 0; i < gizmoHolder.childCount; i++) {
+                var gizmoTransform = gizmoHolder.GetChild(i);
+                var gizmoComponent = gizmoTransform.GetComponent<LevelEditorGizmo>();
+                if (!gizmoComponent.IsWhitelisted(element, id)) continue;
+                if(!gizmoComponent.ShouldShowGizmo(this)) continue; 
+
+                gizmoTransform.gameObject.SetActive(true);
+                if (gizmoComponent != null) gizmoComponent.UpdateGizmo(ray, hitPoint, editor.level.GetCell(hitPoint), element);
+            }
+        }
+
+        private Vector3    _grabOffset;
+        private GameObject _grabElement;
+        private float      _grabDistance;
+
+        private void StartGrab() {
+            var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
+
+            var hitElement = GetRayElement(LevelEditorToolMode.Grab,
+                rightRay,
+                out var hitPoint,
+                out var normal,
+                out var hitElementId,
+                out var cancel,
+                hitTriggers: true);
+
+            _grabElement = hitElement;
+            if (_grabElement == null) return;
+
+            _grabOffset   = _grabElement.transform.position - hitPoint;
+            _grabDistance = Vector3.Distance(rightRay.origin, hitPoint);
+        }
+
+        private void DoGrab(Ray ray) {
+            if (_grabElement == null) return;
+
+            // Duplication when pressing action button while holding grab
+            if (_useDown) {
+                foreach (var entry in selection.ToArray()) {
+                    var element   = (GameObject)entry.Reference;
+                    var elementId = TumbleLevel.GetElementId(element);
+                    editor.AddElement(elementId, element.transform.localPosition, TumbleLevel.GetElementState(element));
+                }
+
+                if (!selection.Contains(_grabElement)) {
+                    var elementId = TumbleLevel.GetElementId(_grabElement);
+                    editor.AddElement(elementId, _grabElement.transform.localPosition, TumbleLevel.GetElementState(_grabElement));
+                }
+            }
+
+            var oldCell     = TumbleLevel.GetLocalCell(_grabElement.transform.localPosition);
+            var newPosition = ray.GetPoint(_grabDistance) + _grabOffset;
+            var newCell     = editor.level.GetCell(newPosition);
+            if (newCell == oldCell) return;
+
+            var offset = newCell - oldCell;
+
+            foreach (var entry in selection.ToArray()) {
+                var element = (GameObject)entry.Reference;
+                editor.MoveElement(element, element.transform.localPosition + offset);
+            }
+
+            if (!selection.Contains(_grabElement)) editor.MoveElement(_grabElement, newCell);
+        }
+
+        private void EndGrab() { _grabElement = null; }
+
 #region Place Mode
         private bool PlaceMode() {
             var rightRay   = _laser.GetPointerRay(HandType.RIGHT, false);
-            var hitElement = GetRayElement(rightRay, out var position, out var normal, out var elementId, out var cancel);
+            var hitElement = GetRayElement(LevelEditorToolMode.Place, rightRay, out var hitPoint, out var normal, out var hitElementId, out var cancel);
             if (cancel) return false;
 
-            position += normal * 0.1f;
-            var levelCell = editor.level.GetCell(position);
+            if (_grabHold || Input.GetMouseButton(1)) {
+                if (_grabDown) StartGrab();
 
+                DoGrab(rightRay);
+
+                if (_grabUp) EndGrab();
+                return true;
+            }
+
+            hitPoint += normal * 0.1f;
+            var levelCell = editor.level.GetCell(hitPoint);
+
+            var elementToPlace = _levelLoader.levelElements[elementId];
+
+            if(elementToPlace == null) return false;
+            DoGizmo(rightRay, hitPoint, elementToPlace);
+            
+            if (elementId < 30) return BlockPlaceMode(levelCell);
+
+            if (_useUp) {
+                var elements = editor.level.GetElementsInCell(levelCell);
+
+                var passed = true;
+
+                foreach (var elementData in elements.ToArray()) {
+                    var element = ((GameObject)elementData.Reference).GetComponent<LevelElement>();
+                    if (element == null) continue;
+
+                    passed &= element.TryOverlapElement(rightRay, hitPoint);
+                }
+
+                if (passed) {
+                    var newElementObject = editor.AddElement(elementId, levelCell, 0);
+
+                    if (newElementObject != null) {
+                        var newElement = newElementObject.GetComponent<LevelElement>();
+                        if (newElement != null) newElement.OnElementPlaced(rightRay, hitPoint);
+                    }
+                }
+            }
+
+            var rootElement = _levelLoader.levelElements[elementId];
+            var meshes      = rootElement.GetComponentsInChildren<MeshFilter>();
+
+            var matrices = new Matrix4x4[meshes.Length];
+
+            for (var i = 0; i < meshes.Length; i++) {
+                var m = meshes[i];
+                // Matrix relative to rootElement
+                var localPos = m.transform.position - rootElement.transform.position;
+                var localRot = m.transform.rotation * Quaternion.Inverse(rootElement.transform.rotation);
+                var localScl = m.transform.lossyScale;
+                matrices[i] = Matrix4x4.TRS(localPos + editor.level.GetWorldPosition(levelCell), localRot, localScl);
+            }
+
+            for (var index = 0; index < meshes.Length; index++) {
+                var m = meshes[index].sharedMesh;
+                if (m == null) continue;
+
+                for (var submesh = 0; submesh < m.subMeshCount; submesh++)
+                    VRCGraphics.DrawMeshInstanced(meshes[index].sharedMesh, submesh, outlinePrepareMaterial, matrices, matrices.Length);
+            }
+
+            for (var index = 0; index < meshes.Length; index++) {
+                var m = meshes[index].sharedMesh;
+
+                for (var submesh = 0; submesh < m.subMeshCount; submesh++)
+                    VRCGraphics.DrawMeshInstanced(meshes[index].sharedMesh, submesh, selectOutlineMaterial, matrices, matrices.Length);
+            }
+
+            return true;
+        }
+
+        private bool BlockPlaceMode(Vector3Int levelCell) {
             var clampedDragEnd = new Vector3Int(
                 Mathf.Clamp(_dragEnd.x, _dragStart.x - MaxBlockSize + 1, _dragStart.x + MaxBlockSize - 1),
                 Mathf.Clamp(_dragEnd.y, _dragStart.y - MaxBlockSize + 1, _dragStart.y + MaxBlockSize - 1),
                 Mathf.Clamp(_dragEnd.z, _dragStart.z - MaxBlockSize + 1, _dragStart.z + MaxBlockSize - 1)
             );
 
-            var start = new Vector3Int(Mathf.Min(_dragStart.x, clampedDragEnd.x), Mathf.Min(_dragStart.y, clampedDragEnd.y), Mathf.Min(_dragStart.z, clampedDragEnd.z));
-            var end   = new Vector3Int(Mathf.Max(_dragStart.x, clampedDragEnd.x), Mathf.Max(_dragStart.y, clampedDragEnd.y), Mathf.Max(_dragStart.z, clampedDragEnd.z));
+            var start = new Vector3Int(Mathf.Min(_dragStart.x, clampedDragEnd.x),
+                Mathf.Min(_dragStart.y,                        clampedDragEnd.y),
+                Mathf.Min(_dragStart.z,                        clampedDragEnd.z));
+
+            var end = new Vector3Int(Mathf.Max(_dragStart.x, clampedDragEnd.x),
+                Mathf.Max(_dragStart.y,                      clampedDragEnd.y),
+                Mathf.Max(_dragStart.z,                      clampedDragEnd.z));
+
             var size  = end - start;
             var perm  = size.x * 9 + size.y * 3 + size.z;
             var index = _blockPermutationIndices[perm];
             var rot   = _blockPermutationRotations[perm];
 
-            if (_useUp) editor.AddElement(index + paintColor * 10, start, rot);
+            if (_useUp) editor.AddElement(index + paintColor * 10, start, TumbleLevelLoader64.EncodeRotation(rot));
 
             if (_useDown || !_useHold) {
                 _dragStart = levelCell;
@@ -267,6 +487,7 @@ namespace Tumble.Scripts.Level {
 
             VRCGraphics.DrawMeshInstanced(mesh, 0, outlinePrepareMaterial, matrix, 1);
             VRCGraphics.DrawMeshInstanced(mesh, 0, placeOutlineMaterial,   matrix, 1);
+
             return true;
         }
 
@@ -334,7 +555,15 @@ namespace Tumble.Scripts.Level {
         private bool BreakMode() {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
+
+            var element = GetRayElement(LevelEditorToolMode.Break,
+                rightRay,
+                out var point,
+                out var normal,
+                out var elementId,
+                out var cancel,
+                hitTriggers: true);
+
             if (cancel) return false;
 
             if (element != null) selection.Add(new DataToken(element));
@@ -348,7 +577,7 @@ namespace Tumble.Scripts.Level {
         private bool PaintMode() {
             selection.Clear();
             var rightRay = _laser.GetPointerRay(HandType.RIGHT, false);
-            var element  = GetRayElement(rightRay, out var point, out var normal, out var elementId, out var cancel);
+            var element  = GetRayElement(LevelEditorToolMode.Paint, rightRay, out var point, out var normal, out var elementId, out var cancel);
             if (cancel) return false;
 
             if (element != null) selection.Add(new DataToken(element));
@@ -366,7 +595,7 @@ namespace Tumble.Scripts.Level {
                     var rotation     = element.transform.localRotation;
 
                     editor.RemoveElement(element);
-                    editor.AddElement(newElementId, position, rotation);
+                    editor.AddElement(newElementId, position, TumbleLevelLoader64.EncodeRotation(rotation));
                 }
             }
 
@@ -408,17 +637,29 @@ namespace Tumble.Scripts.Level {
             _useUp   = !value;
         }
 
-        private void UpdateInputs() {
-            _useDown = false;
-            _useUp   = false;
+        public override void InputGrab(bool value, UdonInputEventArgs args) {
+            if (!Networking.LocalPlayer.IsUserInVR()) return; // This is to avoid immediate duplication
+
+            _grabHold = value;
+            _grabDown = value;
+            _grabUp   = !value;
         }
 
-        private GameObject GetRayElement(Ray ray, out Vector3 point, out Vector3 normal, out int elementId, out bool cancel) {
+        private void UpdateInputs() {
+            _useDown  = false;
+            _useUp    = false;
+            _grabDown = false;
+            _grabUp   = false;
+        }
+
+        private GameObject GetRayElement(
+            LevelEditorToolMode mode, Ray ray, out Vector3 point, out Vector3 normal, out int elementId, out bool cancel, bool hitTriggers = false
+        ) {
             normal    = -ray.direction;
             elementId = -1;
             cancel    = false;
 
-            var hitCount = Physics.RaycastNonAlloc(ray, _hits, maxPlaceDistance);
+            var hitCount = Physics.RaycastNonAlloc(ray, _hits, LaserLength);
 
             if (hitCount > 0) {
                 var        passed         = false;
@@ -431,15 +672,22 @@ namespace Tumble.Scripts.Level {
                     if (h.collider == null) continue;
 
                     if (h.collider.GetComponentInParent<Canvas>() != null) {
-                        point  = h.point;
-                        cancel = true;
-                        this.elementId = -1;
+                        point     = h.point;
+                        cancel    = true;
+                        elementId = -1;
                         return null;
                     }
+
+                    if (h.collider.isTrigger && !hitTriggers) continue;
 
                     if (nearest < h.distance) continue;
 
                     if (editor.level.TryGetHitElement(h, out var element, out var eid)) {
+                        if (mode == LevelEditorToolMode.Place) {
+                            var elementComponent = element.GetComponent<LevelElement>();
+                            if (elementComponent != null && elementComponent.PlaceModeIgnoresColliders) continue;
+                        }
+
                         passed         = true;
                         normal         = h.normal;
                         position       = h.point;
@@ -455,7 +703,7 @@ namespace Tumble.Scripts.Level {
                 }
             }
 
-            point = ray.origin + ray.direction * maxPlaceDistance;
+            point = ray.origin + ray.direction * LaserLength;
             return null;
         }
 
@@ -465,7 +713,11 @@ namespace Tumble.Scripts.Level {
             _placeMesh     = _placeElement.GetComponentInChildren<MeshFilter>().mesh;
         }
 
-        public void SetMode(int mode) { this.mode = (LevelEditorToolMode)mode; }
+        public void SetMode(int mode) {
+            this.mode = (LevelEditorToolMode)mode;
+            selection.Clear();
+            Universe.BroadcastCustomEvent("EventLevelEditorToolModeChanged");
+        }
     }
 
     public enum LevelEditorToolMode {
@@ -474,5 +726,6 @@ namespace Tumble.Scripts.Level {
         Place,
         Break,
         Paint,
+        Grab,
     }
 }

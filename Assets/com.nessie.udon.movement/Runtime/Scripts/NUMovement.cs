@@ -140,6 +140,9 @@ namespace Nessie.Udon.Movement {
                 ApplyGravity();
             }
 
+            Controller.enableOverlapRecovery = !noClip;
+            Controller.detectCollisions      = !noClip;
+            
             Move(Velocity * DeltaTime + MotionOffset);
 
             if (!noClip) ApplyGroundSnap();

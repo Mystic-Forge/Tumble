@@ -8,12 +8,6 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 398425145637686714, guid: fd64efa4885fd014689c37f0e5ad8718,
-        type: 3}
-      propertyPath: m_Mesh
-      value: 
-      objectReference: {fileID: 7092384028155593541, guid: 88927043f2bbaa044a95fae636dadcde,
-        type: 3}
     - target: {fileID: 1159718404198074010, guid: fd64efa4885fd014689c37f0e5ad8718,
         type: 3}
       propertyPath: m_Size.z

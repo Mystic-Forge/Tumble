@@ -9,62 +9,47 @@ using VRC.SDKBase;
 using VRC.Udon;
 
 
-public class TumbleRoomConfigurationUI : UdonSharpBehaviour {
-    public GameObject hideMenu;
-    public GameObject container;
+[UdonBehaviourSyncMode(BehaviourSyncMode.None)]
+public class TumbleRoomConfigurationUI : TumbleBehaviour {
     public InputField roomNameInputField;
 
     public Transform  usersContainer;
     public GameObject userEntryPrefab;
-
-    private Universe          _universe;
-    private PlayerRoomManager _roomManager;
-
-    private TumbleRoom CurrentRoom => _roomManager.LocalRoom;
-
-    private float _lastUserListUpdate;
-
-    private void Start() {
-        _universe    = GetComponentInParent<Universe>();
-        _roomManager = _universe.playerRoomManager;
-    }
-
-    private void Update() {
-        var room = CurrentRoom;
-        container.SetActive(room != null);
-        hideMenu.SetActive(room == null);
-        if (room == null) return;
-
-        var isOwner = room.LocalIsRoomOwner;
-        roomNameInputField.interactable = isOwner;
-        if (!isOwner) roomNameInputField.text = room.roomName;
-
-        // We should only update this if the user list changed, but this is fine for now
-        if (Time.time - _lastUserListUpdate > 5) UpdateUserList();
-    }
-
+    
     public void UpdateUserList() {
-        var room = CurrentRoom;
-        _lastUserListUpdate = Time.time;
-
         for (var i = usersContainer.childCount - 1; i >= 0; i--) DestroyImmediate(usersContainer.GetChild(i).gameObject);
 
-        foreach (var player in room.GetPlayers()) {
+        foreach (var player in LocalRoom.GetPlayers()) {
             var entry = Instantiate(userEntryPrefab, usersContainer);
-            entry.GetComponent<UserUIElement>().SetUser(player, room, this);
+            entry.GetComponent<UserUIElement>().SetUser(player, LocalRoom, this);
         }
     }
 
     public void UpdateRoomName() {
-        var room = CurrentRoom;
-        if (room == null) return;
-        if (!room.LocalIsRoomOwner) return;
+        if (LocalRoom == null) return;
+        if (!LocalRoom.LocalIsOwner) return;
 
-        room.roomName = roomNameInputField.text;
-        room.RequestSerialization();
+        LocalRoom.roomName = roomNameInputField.text;
+        LocalRoom.RequestSerialization();
     }
 
-    public void EventOnRoomLoaded() {
-        roomNameInputField.text = CurrentRoom.roomName;
+    public void EventRoomLoaded() {
+        gameObject.SetActive(true);
+        roomNameInputField.text = LocalRoom.roomName;
+    }
+    
+    public void EventRoomUnloaded() {
+        gameObject.SetActive(false);
+    }
+
+    public void EventRoomOwnerChanged() {
+        var isOwner = LocalRoom.LocalIsOwner;
+        roomNameInputField.interactable = isOwner;
+        // roomNameInputField.text         = LocalRoom.roomName;
+        UpdateUserList();
+    }
+
+    public void EventRoomUsersUpdated() {
+        UpdateUserList();
     }
 }

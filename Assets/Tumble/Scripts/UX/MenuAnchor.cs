@@ -15,6 +15,6 @@ public class MenuAnchor : UdonSharpBehaviour
     
     public override void OnPlayerTriggerEnter(VRCPlayerApi player) {
         if(player.isLocal)
-            _universe.mainMenu.transform.SetPositionAndRotation(transform.position, transform.rotation);
+            _universe.menuHolder.transform.SetPositionAndRotation(transform.position, transform.rotation);
     }
 }

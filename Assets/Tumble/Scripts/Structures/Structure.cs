@@ -62,21 +62,23 @@ public class Structure : UdonSharpBehaviour {
 
         _foundGround = false;
 
-        if (spawning) {
-            var dir  = transform.position - _spawnHeadPos;
-            var hits = Physics.RaycastAll(_spawnHeadPos, dir.normalized, dir.magnitude);
+        // if (spawning) {
+        //     var dir  = transform.position - _spawnHeadPos;
+        //     var hits = Physics.RaycastAll(_spawnHeadPos, dir.normalized, dir.magnitude);
+        //
+        //     foreach (var hit in hits) {
+        //         if (hit.collider == null) continue;
+        //         if (hit.collider.GetComponentInParent<NUMovement>() != null) continue;
+        //         if (hit.collider.GetComponentInParent<Structure>() != null) continue;
+        //
+        //         if (_universe.modifiers.AllGroundIsDirt || GetHitGroundType(hit) != GroundType.Break) {
+        //             _foundGround = true;
+        //             break;
+        //         }
+        //     }
+        // }
 
-            foreach (var hit in hits) {
-                if (hit.collider == null) continue;
-                if (hit.collider.GetComponentInParent<NUMovement>() != null) continue;
-                if (hit.collider.GetComponentInParent<Structure>() != null) continue;
-
-                if (_universe.modifiers.AllGroundIsDirt || GetHitGroundType(hit) != GroundType.Break) {
-                    _foundGround = true;
-                    break;
-                }
-            }
-        }
+        transform.position += velocity * Time.fixedDeltaTime;
 
         // Collision Detection / Response
         var boxHits = Physics.BoxCastAll(collider.transform.position,
@@ -89,15 +91,13 @@ public class Structure : UdonSharpBehaviour {
             if (ProcessHit(hit)) continue;
             if (ProcessOverlap(hit.collider)) continue;
         }
-
-        transform.position += velocity * Time.fixedDeltaTime;
-
+        
         var overlap = Physics.OverlapBox(collider.transform.position, collider.size / 2, collider.transform.rotation);
 
         foreach (var collider in overlap)
             if (ProcessOverlap(collider))
                 continue;
-
+        
         if (_foundGround && !spawning && !grounded)
             Ground();
         else if (!_foundGround && grounded) UnGround();

@@ -27,17 +27,15 @@ public class UserUIElement : UdonSharpBehaviour {
         
         usernameText.text = user.displayName;
         kickButton.SetActive(false); // Will implement kicking later
-        promoteButton.SetActive(room.LocalIsRoomOwner);
-        promoteGold.SetActive(room.roomOwner == user.displayName);
+        promoteButton.SetActive(room.LocalIsOwner);
+        promoteGold.SetActive(room.ownerId == user.playerId);
     }
     
     public void PromoteUser() {
         if(User.isLocal) return; // We can only press this button if we are already the room owner
         _room.SetRoomOwner(User);
-        _configUI.UpdateUserList();
     }
     
     public void KickUser() {
-        // _room.
     }
 }

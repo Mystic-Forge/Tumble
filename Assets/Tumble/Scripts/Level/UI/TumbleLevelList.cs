@@ -64,14 +64,13 @@ public class TumbleLevelList : UdonSharpBehaviour {
     }
 
     public void AddLevel(string levelId, DataDictionary level) {
-        Debug.Log($"[TUMBLE] Adding level to list: {level}");
         var element = Instantiate(levelUIElementPrefab);
         element.transform.SetParent(list, false);
         element.GetComponent<TumbleLevelUIElement>().SetLevelData(this, levelId, level);
     }
 
     public void LoadLevel(string levelId) {
-        var room = _universe.playerRoomManager.LocalRoom;
+        var room = _universe.playerRoomManager.LocalTrackerRoom;
 
         if (room == null) { _universe.playerRoomManager.RequestRoom(RoomType.Level, levelId); }
     }

@@ -9,17 +9,13 @@ using UnityEngine;
 using VRC.SDKBase;
 
 
-public class LocalTimeDisplay : UdonSharpBehaviour {
+public class LocalTimeDisplay : TumbleBehaviour {
     public TextMeshProUGUI currentTime;
     public TextMeshProUGUI bestTime;
     public Canvas          canvas;
     public bool            forVR;
 
-    private Universe _universe;
-
-    private LeaderboardManager _leaderboardManager;
-
-    private PlayerLeaderboard LocalLeaderboard => _leaderboardManager.LocalLeaderboard;
+    private PlayerLeaderboard LocalLeaderboard => Universe.leaderboardManager.LocalLeaderboard;
 
     private float CurrentTime => LocalLeaderboard.currentTime;
 
@@ -27,17 +23,17 @@ public class LocalTimeDisplay : UdonSharpBehaviour {
 
     private float BestTime {
         get {
+            if(LocalLeaderboard == null) return 0;
+            if(LocalLeaderboard.currentLevel == null) return 0;
+            
             var platform = 1 << (int)(Networking.LocalPlayer.IsUserInVR() ? Platform.VR : Platform.Desktop);
-            var time     = LocalLeaderboard.GetBestLevelTime(LocalLeaderboard.currentLevel, _universe.modifiers.EnabledModifiers, platform);
+            var time     = LocalLeaderboard.GetBestLevelTime(LocalLeaderboard.currentLevel.levelId, Universe.modifiers.EnabledModifiers, platform);
             if (time == null) return 0;
             return PlayerLeaderboard.GetTimeFromData(time);
         }
     }
 
     private void Start() {
-        _universe           = GetComponentInParent<Universe>();
-        _leaderboardManager = _universe.leaderboardManager;
-        
         if(forVR && !Networking.LocalPlayer.IsUserInVR()) gameObject.SetActive(false);
     }
 
